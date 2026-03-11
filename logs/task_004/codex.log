@@ -1,0 +1,1780 @@
+# Codex Log: Task 004 - Signal Analysis
+
+## Prompt
+
+# Task 004 — 信号分析（IC / ICIR / Signal Decay）
+
+## 目标
+通过 IC 时序分析、ICIR 计算和 Signal Decay Test 量化评估情绪信号的预测能力。
+
+## 工作目录
+`code/`
+
+## 依赖
+- `hsi_features.csv`（Task 002 输出）
+
+## 输出文件
+- `task_004_signal_analysis.py` — 信号分析模块
+
+## 详细要求
+
+### 1. 月度 IC 计算与时序图
+IC（Information Coefficient）= Spearman 相关系数（情绪信号与下一期收益）
+
+```python
+from scipy import stats
+
+# 按月计算 IC
+df['year_month'] = df['Date'].dt.to_period('M')
+monthly_ic = []
+
+for period, group in df.groupby('year_month'):
+    clean = group[['sentiment_score', 'return_open']].dropna()
+    if len(clean) < 5:  # 数据量不足跳过
+        continue
+    ic, p = stats.spearmanr(clean['sentiment_score'], clean['return_open'])
+    monthly_ic.append({'period': period, 'ic': ic, 'p_value': p, 'n': len(clean)})
+
+ic_df = pd.DataFrame(monthly_ic)
+ic_df['period_dt'] = ic_df['period'].dt.to_timestamp()
+
+# IC 时序图
+fig, ax = plt.subplots(figsize=(14, 5))
+ax.bar(ic_df['period_dt'], ic_df['ic'], width=20,
+       color=['green' if x > 0 else 'red' for x in ic_df['ic']], alpha=0.7)
+ax.axhline(y=0, color='black', linestyle='-', linewidth=0.5)
+ax.axhline(y=ic_df['ic'].mean(), color='blue', linestyle='--', label=f'Mean IC={ic_df["ic"].mean():.4f}')
+ax.set_title('Monthly IC (Sentiment Score vs Next-Day Return)')
+ax.set_xlabel('Date')
+ax.set_ylabel('Spearman IC')
+ax.legend()
+plt.tight_layout()
+plt.savefig('fig_08_monthly_ic.png', dpi=150, bbox_inches='tight')
+plt.show()
+```
+
+### 2. ICIR 计算
+```python
+mean_ic = ic_df['ic'].mean()
+std_ic = ic_df['ic'].std()
+icir = mean_ic / std_ic
+
+print("=" * 50)
+print("Signal Quality Metrics")
+print("=" * 50)
+print(f"Mean IC:     {mean_ic:.4f}")
+print(f"IC Std:      {std_ic:.4f}")
+print(f"ICIR:        {icir:.4f}")
+print(f"IC > 0 pct:  {(ic_df['ic'] > 0).mean():.1%}")
+print(f"Num months:  {len(ic_df)}")
+```
+
+### 3. 统计显著性检验
+```python
+# 全样本 t-test：IC 序列是否显著异于 0
+from scipy.stats import ttest_1samp
+t_stat, p_val = ttest_1samp(ic_df['ic'].dropna(), 0)
+print(f"\nIC t-test: t={t_stat:.3f}, p={p_val:.4f}")
+print(f"Statistically significant (p<0.05): {p_val < 0.05}")
+```
+
+### 4. Signal Decay Test
+检验情绪信号的时效性：`sentiment_t` 分别对 `return_t+1`、`return_t+2`、`return_t+3` 的预测力
+
+```python
+decay_results = []
+for lag in [1, 2, 3]:
+    # 情绪信号预测 lag 期后的收益
+    future_return = df['return_open'].shift(-lag)
+    clean = pd.DataFrame({'signal': df['sentiment_score'], 'future_return': future_return}).dropna()
+    ic, p = stats.spearmanr(clean['signal'], clean['future_return'])
+    decay_results.append({'horizon': f't+{lag}', 'ic': ic, 'p_value': p})
+
+decay_df = pd.DataFrame(decay_results)
+print("\nSignal Decay Analysis:")
+print(decay_df.to_string(index=False))
+
+# Signal Decay 曲线
+fig, ax = plt.subplots(figsize=(8, 5))
+ax.bar(decay_df['horizon'], decay_df['ic'], color=['#2196F3','#64B5F6','#BBDEFB'])
+ax.axhline(y=0, color='black', linestyle='-', linewidth=0.5)
+ax.set_title('Signal Decay: IC at Different Horizons')
+ax.set_xlabel('Forecast Horizon')
+ax.set_ylabel('Spearman IC')
+for i, row in decay_df.iterrows():
+    ax.text(i, row['ic'] + 0.001, f'{row["ic"]:.4f}', ha='center', fontsize=10)
+plt.tight_layout()
+plt.savefig('fig_09_signal_decay.png', dpi=150, bbox_inches='tight')
+plt.show()
+```
+
+## 代码规范
+- ICIR 结果用醒目的打印格式输出（`=` 分隔线）
+- 图表保存 PNG 备用
+- 月度 IC 数据保存为 DataFrame 供后续使用
+
+## 验收标准
+- [ ] 月度 IC 时序图生成（约 37 个月的柱状图）
+- [ ] ICIR 数值正确计算并打印
+- [ ] Signal Decay 曲线展示 3 个预测期的 IC
+- [ ] t-test 结果打印，含显著性判断
+
+<!-- FACTORY:DONE -->
+
+
+## Output
+
+OpenAI Codex v0.111.0 (research preview)
+--------
+workdir: C:\Coding\AI-factory-projects\quantitative-research-workflow\code
+model: gpt-5.4
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, C:\Users\86579\.codex\memories]
+reasoning effort: none
+reasoning summaries: none
+session id: 019cdde3-4499-7853-bafc-746a8807d382
+--------
+user
+# Task 004 — 信号分析（IC / ICIR / Signal Decay）
+
+## 目标
+通过 IC 时序分析、ICIR 计算和 Signal Decay Test 量化评估情绪信号的预测能力。
+
+## 工作目录
+`code/`
+
+## 依赖
+- `hsi_features.csv`（Task 002 输出）
+
+## 输出文件
+- `task_004_signal_analysis.py` — 信号分析模块
+
+## 详细要求
+
+### 1. 月度 IC 计算与时序图
+IC（Information Coefficient）= Spearman 相关系数（情绪信号与下一期收益）
+
+```python
+from scipy import stats
+
+# 按月计算 IC
+df['year_month'] = df['Date'].dt.to_period('M')
+monthly_ic = []
+
+for period, group in df.groupby('year_month'):
+    clean = group[['sentiment_score', 'return_open']].dropna()
+    if len(clean) < 5:  # 数据量不足跳过
+        continue
+    ic, p = stats.spearmanr(clean['sentiment_score'], clean['return_open'])
+    monthly_ic.append({'period': period, 'ic': ic, 'p_value': p, 'n': len(clean)})
+
+ic_df = pd.DataFrame(monthly_ic)
+ic_df['period_dt'] = ic_df['period'].dt.to_timestamp()
+
+# IC 时序图
+fig, ax = plt.subplots(figsize=(14, 5))
+ax.bar(ic_df['period_dt'], ic_df['ic'], width=20,
+       color=['green' if x > 0 else 'red' for x in ic_df['ic']], alpha=0.7)
+ax.axhline(y=0, color='black', linestyle='-', linewidth=0.5)
+ax.axhline(y=ic_df['ic'].mean(), color='blue', linestyle='--', label=f'Mean IC={ic_df["ic"].mean():.4f}')
+ax.set_title('Monthly IC (Sentiment Score vs Next-Day Return)')
+ax.set_xlabel('Date')
+ax.set_ylabel('Spearman IC')
+ax.legend()
+plt.tight_layout()
+plt.savefig('fig_08_monthly_ic.png', dpi=150, bbox_inches='tight')
+plt.show()
+```
+
+### 2. ICIR 计算
+```python
+mean_ic = ic_df['ic'].mean()
+std_ic = ic_df['ic'].std()
+icir = mean_ic / std_ic
+
+print("=" * 50)
+print("Signal Quality Metrics")
+print("=" * 50)
+print(f"Mean IC:     {mean_ic:.4f}")
+print(f"IC Std:      {std_ic:.4f}")
+print(f"ICIR:        {icir:.4f}")
+print(f"IC > 0 pct:  {(ic_df['ic'] > 0).mean():.1%}")
+print(f"Num months:  {len(ic_df)}")
+```
+
+### 3. 统计显著性检验
+```python
+# 全样本 t-test：IC 序列是否显著异于 0
+from scipy.stats import ttest_1samp
+t_stat, p_val = ttest_1samp(ic_df['ic'].dropna(), 0)
+print(f"\nIC t-test: t={t_stat:.3f}, p={p_val:.4f}")
+print(f"Statistically significant (p<0.05): {p_val < 0.05}")
+```
+
+### 4. Signal Decay Test
+检验情绪信号的时效性：`sentiment_t` 分别对 `return_t+1`、`return_t+2`、`return_t+3` 的预测力
+
+```python
+decay_results = []
+for lag in [1, 2, 3]:
+    # 情绪信号预测 lag 期后的收益
+    future_return = df['return_open'].shift(-lag)
+    clean = pd.DataFrame({'signal': df['sentiment_score'], 'future_return': future_return}).dropna()
+    ic, p = stats.spearmanr(clean['signal'], clean['future_return'])
+    decay_results.append({'horizon': f't+{lag}', 'ic': ic, 'p_value': p})
+
+decay_df = pd.DataFrame(decay_results)
+print("\nSignal Decay Analysis:")
+print(decay_df.to_string(index=False))
+
+# Signal Decay 曲线
+fig, ax = plt.subplots(figsize=(8, 5))
+ax.bar(decay_df['horizon'], decay_df['ic'], color=['#2196F3','#64B5F6','#BBDEFB'])
+ax.axhline(y=0, color='black', linestyle='-', linewidth=0.5)
+ax.set_title('Signal Decay: IC at Different Horizons')
+ax.set_xlabel('Forecast Horizon')
+ax.set_ylabel('Spearman IC')
+for i, row in decay_df.iterrows():
+    ax.text(i, row['ic'] + 0.001, f'{row["ic"]:.4f}', ha='center', fontsize=10)
+plt.tight_layout()
+plt.savefig('fig_09_signal_decay.png', dpi=150, bbox_inches='tight')
+plt.show()
+```
+
+## 代码规范
+- ICIR 结果用醒目的打印格式输出（`=` 分隔线）
+- 图表保存 PNG 备用
+- 月度 IC 数据保存为 DataFrame 供后续使用
+
+## 验收标准
+- [ ] 月度 IC 时序图生成（约 37 个月的柱状图）
+- [ ] ICIR 数值正确计算并打印
+- [ ] Signal Decay 曲线展示 3 个预测期的 IC
+- [ ] t-test 结果打印，含显著性判断
+
+<!-- FACTORY:DONE -->
+
+mcp startup: no servers
+codex
+我会先检查现有代码结构和 `hsi_features.csv` 的字段，确认 Task 004 应该接入的位置，再直接实现 `task_004_signal_analysis.py` 并做一次本地验证。
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command 'Get-ChildItem -Force' in C:\Coding\AI-factory-projects\quantitative-research-workflow\codeexec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command 'Get-ChildItem -Recurse -Filter hsi_features.csv' in C:\Coding\AI-factory-projects\quantitative-research-workflow\codeexec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command 'rg --files' in C:\Coding\AI-factory-projects\quantitative-research-workflow\code succeeded in 331ms:
+__pycache__\task_003_eda.cpython-314.pyc
+__pycache__\task_002_feature_engineering.cpython-314.pyc
+__pycache__\task_001_data_loading.cpython-314.pyc
+task_003_eda.py
+task_002_feature_engineering.py
+task_001_data_loading.py
+ succeeded in 333ms:
+
+
+    目录: C:\Coding\AI-factory-projects\quantitative-research-workflow\code
+
+
+Mode                 LastWriteTime         Length Name                                                                 
+----                 -------------         ------ ----                                                                 
+d-----         2026/3/12      1:12                __pycache__                                                          
+-a----         2026/3/12      1:10           2802 task_001_data_loading.py                                             
+-a----         2026/3/12      1:11           3991 task_002_feature_engineering.py                                      
+-a----         2026/3/12      1:12           6707 task_003_eda.py                                                      
+
+
+ succeeded in 339ms:
+
+codex
+目录里还没有 `hsi_features.csv`，我先读 Task 002/003 的实现约定，按现有风格补 Task 004；如果输入文件确实缺失，我会把验证结果单独说明。
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command 'Get-Content task_002_feature_engineering.py' in C:\Coding\AI-factory-projects\quantitative-research-workflow\codeexec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command 'Get-Content task_003_eda.py' in C:\Coding\AI-factory-projects\quantitative-research-workflow\code succeeded in 283ms:
+from pathlib import Path
+
+import pandas as pd
+
+
+INPUT_FILE = "hsi_clean.csv"
+OUTPUT_FILE = "hsi_features.csv"
+FEATURE_SUMMARY_COLUMNS = [
+    "sentiment_score",
+    "vote_imbalance",
+    "return_open",
+    "return_close",
+]
+
+
+def load_data(file_path: str) -> pd.DataFrame:
+    print(f"Loading clean data from {file_path}...")
+    df = pd.read_csv(file_path)
+    if "Date" in df.columns:
+        df["Date"] = pd.to_datetime(df["Date"])
+ succeeded in 292ms:
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import seaborn as sns
+from scipy import stats
+
+
+INPUT_FILE = "hsi_features.csv"
+FONT_SIZE = 12
+QUANTILE_LABELS = ["Q1", "Q2", "Q3", "Q4", "Q5"]
+QUANTILE_COLORS = ["#d73027", "#fc8d59", "#fee090", "#91bfdb", "#4575b4"]
+
+
+def load_data(file_path: str) -> pd.DataFrame:
+    print(f"Loading feature data from {file_path}...")
+    df = pd.read_csv(file_path)
+    if "Date" in df.columns:
+        df["Date"] = pd.to_datetime(df["Date"])
+codex
+现有脚本是独立可运行风格：`load/validate/run/main`。我会沿用这个结构，把月度 IC、ICIR、t-test、decay、两张图和可复用的 `DataFrame` 输出都放进一个模块里。
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command 'Get-Content task_001_data_loading.py' in C:\Coding\AI-factory-projects\quantitative-research-workflow\code succeeded in 292ms:
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+
+
+DATA_FILE = "HSI.xlsx"
+OUTPUT_FILE = "hsi_clean.csv"
+VOTE_TOLERANCE = 1e-6
+SUMMARY_COLUMNS = ["Open", "High", "Low", "Close", "Up votes", "Down votes"]
+
+
+def load_data(file_path: str) -> pd.DataFrame:
+    print(f"Loading data from {file_path}...")
+    df = pd.read_excel(file_path)
+    df["Date"] = pd.to_datetime(df["Date"])
+    df = df.sort_values("Date").reset_index(drop=True)
+    print("Data loaded and sorted by Date.")
+    return df
+
+codex
+接下来直接写 `task_004_signal_analysis.py`。实现里会补上边界处理，例如月度样本过少、IC 标准差为 0、t-test 样本不足，避免脚本在小样本时直接崩掉。
+file update
+A C:\Coding\AI-factory-projects\quantitative-research-workflow\code\task_004_signal_analysis.py
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import seaborn as sns
+from scipy import stats
+from scipy.stats import ttest_1samp
+
+
+INPUT_FILE = "hsi_features.csv"
+MONTHLY_IC_FIG = "fig_08_monthly_ic.png"
+SIGNAL_DECAY_FIG = "fig_09_signal_decay.png"
+MONTHLY_IC_OUTPUT = "monthly_ic.csv"
+SIGNAL_DECAY_OUTPUT = "signal_decay.csv"
+MIN_MONTHLY_OBSERVATIONS = 5
+DECAY_HORIZONS = [1, 2, 3]
+FONT_SIZE = 12
+
+
+def load_data(file_path: str) -> pd.DataFrame:
+    print(f"Loading feature data from {file_path}...")
+    df = pd.read_csv(file_path)
+    if "Date" in df.columns:
+        df["Date"] = pd.to_datetime(df["Date"])
+        df = df.sort_values("Date").reset_index(drop=True)
+    print("Feature data loaded.")
+    return df
+
+
+def validate_columns(df: pd.DataFrame) -> None:
+    required_columns = {"Date", "sentiment_score", "return_open"}
+    missing_columns = required_columns.difference(df.columns)
+    if missing_columns:
+        missing_str = ", ".join(sorted(missing_columns))
+        raise ValueError(f"Missing required columns: {missing_str}")
+
+
+def configure_plot_style() -> None:
+    plt.rcParams["font.size"] = FONT_SIZE
+    sns.set_style("whitegrid")
+
+
+def save_and_show(fig: plt.Figure, output_path: str) -> None:
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=150, bbox_inches="tight")
+    plt.show()
+    plt.close(fig)
+    print(f"Saved {output_path}")
+
+
+def compute_monthly_ic(df: pd.DataFrame) -> pd.DataFrame:
+    working = df.copy()
+    working["year_month"] = working["Date"].dt.to_period("M")
+    monthly_ic = []
+
+    for period, group in working.groupby("year_month"):
+        clean = group[["sentiment_score", "return_open"]].dropna()
+        if len(clean) < MIN_MONTHLY_OBSERVATIONS:
+            continue
+
+        ic, p_value = stats.spearmanr(clean["sentiment_score"], clean["return_open"])
+        monthly_ic.append(
+            {
+                "period": period,
+                "ic": ic,
+                "p_value": p_value,
+                "n": len(clean),
+            }
+        )
+
+    ic_df = pd.DataFrame(monthly_ic)
+    if ic_df.empty:
+        raise ValueError(
+            "No monthly IC values were produced. Check that hsi_features.csv has enough "
+            "non-null sentiment_score and return_open observations per month."
+        )
+
+    ic_df["period_dt"] = ic_df["period"].dt.to_timestamp()
+    return ic_df
+
+
+def plot_monthly_ic(ic_df: pd.DataFrame) -> None:
+    mean_ic = ic_df["ic"].mean()
+    colors = ["green" if x > 0 else "red" for x in ic_df["ic"]]
+
+    fig, ax = plt.subplots(figsize=(14, 5))
+    ax.bar(ic_df["period_dt"], ic_df["ic"], width=20, color=colors, alpha=0.7)
+    ax.axhline(y=0, color="black", linestyle="-", linewidth=0.5)
+    ax.axhline(
+        y=mean_ic,
+        color="blue",
+        linestyle="--",
+        label=f"Mean IC={mean_ic:.4f}",
+    )
+    ax.set_title("Monthly IC (Sentiment Score vs Next-Day Return)")
+    ax.set_xlabel("Date")
+    ax.set_ylabel("Spearman IC")
+    ax.legend()
+    save_and_show(fig, MONTHLY_IC_FIG)
+
+
+def print_ic_metrics(ic_df: pd.DataFrame) -> dict[str, float]:
+    mean_ic = ic_df["ic"].mean()
+    std_ic = ic_df["ic"].std()
+    ic_positive_pct = (ic_df["ic"] > 0).mean()
+    icir = np.nan if pd.isna(std_ic) or np.isclose(std_ic, 0) else mean_ic / std_ic
+
+    print("=" * 50)
+    print("Signal Quality Metrics")
+    print("=" * 50)
+    print(f"Mean IC:     {mean_ic:.4f}")
+    print(f"IC Std:      {std_ic:.4f}")
+    print(f"ICIR:        {icir:.4f}" if not pd.isna(icir) else "ICIR:        nan")
+    print(f"IC > 0 pct:  {ic_positive_pct:.1%}")
+    print(f"Num months:  {len(ic_df)}")
+
+    return {
+        "mean_ic": mean_ic,
+        "std_ic": std_ic,
+        "icir": icir,
+        "ic_positive_pct": ic_positive_pct,
+    }
+
+
+def run_ic_ttest(ic_df: pd.DataFrame) -> tuple[float, float]:
+    ic_series = ic_df["ic"].dropna()
+    if len(ic_series) < 2:
+        raise ValueError("At least two monthly IC observations are required for the t-test.")
+
+    t_stat, p_val = ttest_1samp(ic_series, 0)
+    print(f"\nIC t-test: t={t_stat:.3f}, p={p_val:.4f}")
+    print(f"Statistically significant (p<0.05): {p_val < 0.05}")
+    return t_stat, p_val
+
+
+def compute_signal_decay(df: pd.DataFrame) -> pd.DataFrame:
+    decay_results = []
+
+    for lag in DECAY_HORIZONS:
+        future_return = df["return_open"].shift(-lag)
+        clean = pd.DataFrame(
+            {
+                "signal": df["sentiment_score"],
+                "future_return": future_return,
+            }
+        ).dropna()
+        if clean.empty:
+            decay_results.append({"horizon": f"t+{lag}", "ic": np.nan, "p_value": np.nan, "n": 0})
+            continue
+
+        ic, p_value = stats.spearmanr(clean["signal"], clean["future_return"])
+        decay_results.append(
+            {
+                "horizon": f"t+{lag}",
+                "ic": ic,
+                "p_value": p_value,
+                "n": len(clean),
+            }
+        )
+
+    return pd.DataFrame(decay_results)
+
+
+def print_signal_decay(decay_df: pd.DataFrame) -> None:
+    print("\nSignal Decay Analysis:")
+    print(decay_df.to_string(index=False))
+
+
+def plot_signal_decay(decay_df: pd.DataFrame) -> None:
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.bar(decay_df["horizon"], decay_df["ic"], color=["#2196F3", "#64B5F6", "#BBDEFB"])
+    ax.axhline(y=0, color="black", linestyle="-", linewidth=0.5)
+    ax.set_title("Signal Decay: IC at Different Horizons")
+    ax.set_xlabel("Forecast Horizon")
+    ax.set_ylabel("Spearman IC")
+
+    for i, row in decay_df.iterrows():
+        if pd.isna(row["ic"]):
+            continue
+        offset = 0.001 if row["ic"] >= 0 else -0.003
+        ax.text(i, row["ic"] + offset, f"{row['ic']:.4f}", ha="center", fontsize=10)
+
+    save_and_show(fig, SIGNAL_DECAY_FIG)
+
+
+def save_analysis_tables(ic_df: pd.DataFrame, decay_df: pd.DataFrame) -> None:
+    ic_to_save = ic_df.copy()
+    ic_to_save["period"] = ic_to_save["period"].astype(str)
+    ic_to_save.to_csv(MONTHLY_IC_OUTPUT, index=False)
+    decay_df.to_csv(SIGNAL_DECAY_OUTPUT, index=False)
+    print(f"Saved {MONTHLY_IC_OUTPUT}")
+    print(f"Saved {SIGNAL_DECAY_OUTPUT}")
+
+
+def main() -> None:
+    input_path = Path(INPUT_FILE)
+    if not input_path.exists():
+        raise FileNotFoundError(
+            f"Input file not found: {input_path.resolve()}. "
+            "Run task_002_feature_engineering.py first to generate hsi_features.csv."
+        )
+
+    configure_plot_style()
+    df = load_data(str(input_path))
+    validate_columns(df)
+
+    ic_df = compute_monthly_ic(df)
+    plot_monthly_ic(ic_df)
+    print_ic_metrics(ic_df)
+    run_ic_ttest(ic_df)
+
+    decay_df = compute_signal_decay(df)
+    print_signal_decay(decay_df)
+    plot_signal_decay(decay_df)
+
+    save_analysis_tables(ic_df, decay_df)
+
+
+if __name__ == "__main__":
+    main()
+apply_patch(auto_approved=true) exited 0 in 113ms:
+Success. Updated the following files:
+A task_004_signal_analysis.py
+file update:
+diff --git a/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_004_signal_analysis.py b/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_004_signal_analysis.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..34425093a6cf6f0a18b79edac95b99a6229d6af1
+--- /dev/null
++++ b/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_004_signal_analysis.py
+@@ -0,0 +1,221 @@
++from pathlib import Path
++
++import matplotlib.pyplot as plt
++import numpy as np
++import pandas as pd
++import seaborn as sns
++from scipy import stats
++from scipy.stats import ttest_1samp
++
++
++INPUT_FILE = "hsi_features.csv"
++MONTHLY_IC_FIG = "fig_08_monthly_ic.png"
++SIGNAL_DECAY_FIG = "fig_09_signal_decay.png"
++MONTHLY_IC_OUTPUT = "monthly_ic.csv"
++SIGNAL_DECAY_OUTPUT = "signal_decay.csv"
++MIN_MONTHLY_OBSERVATIONS = 5
++DECAY_HORIZONS = [1, 2, 3]
++FONT_SIZE = 12
++
++
++def load_data(file_path: str) -> pd.DataFrame:
++    print(f"Loading feature data from {file_path}...")
++    df = pd.read_csv(file_path)
++    if "Date" in df.columns:
++        df["Date"] = pd.to_datetime(df["Date"])
++        df = df.sort_values("Date").reset_index(drop=True)
++    print("Feature data loaded.")
++    return df
++
++
++def validate_columns(df: pd.DataFrame) -> None:
++    required_columns = {"Date", "sentiment_score", "return_open"}
++    missing_columns = required_columns.difference(df.columns)
++    if missing_columns:
++        missing_str = ", ".join(sorted(missing_columns))
++        raise ValueError(f"Missing required columns: {missing_str}")
++
++
++def configure_plot_style() -> None:
++    plt.rcParams["font.size"] = FONT_SIZE
++    sns.set_style("whitegrid")
++
++
++def save_and_show(fig: plt.Figure, output_path: str) -> None:
++    fig.tight_layout()
++    fig.savefig(output_path, dpi=150, bbox_inches="tight")
++    plt.show()
++    plt.close(fig)
++    print(f"Saved {output_path}")
++
++
++def compute_monthly_ic(df: pd.DataFrame) -> pd.DataFrame:
++    working = df.copy()
++    working["year_month"] = working["Date"].dt.to_period("M")
++    monthly_ic = []
++
++    for period, group in working.groupby("year_month"):
++        clean = group[["sentiment_score", "return_open"]].dropna()
++        if len(clean) < MIN_MONTHLY_OBSERVATIONS:
++            continue
++
++        ic, p_value = stats.spearmanr(clean["sentiment_score"], clean["return_open"])
++        monthly_ic.append(
++            {
++                "period": period,
++                "ic": ic,
++                "p_value": p_value,
++                "n": len(clean),
++            }
++        )
++
++    ic_df = pd.DataFrame(monthly_ic)
++    if ic_df.empty:
++        raise ValueError(
++            "No monthly IC values were produced. Check that hsi_features.csv has enough "
++            "non-null sentiment_score and return_open observations per month."
++        )
++
++    ic_df["period_dt"] = ic_df["period"].dt.to_timestamp()
++    return ic_df
++
++
++def plot_monthly_ic(ic_df: pd.DataFrame) -> None:
++    mean_ic = ic_df["ic"].mean()
++    colors = ["green" if x > 0 else "red" for x in ic_df["ic"]]
++
++    fig, ax = plt.subplots(figsize=(14, 5))
++    ax.bar(ic_df["period_dt"], ic_df["ic"], width=20, color=colors, alpha=0.7)
++    ax.axhline(y=0, color="black", linestyle="-", linewidth=0.5)
++    ax.axhline(
++        y=mean_ic,
++        color="blue",
++        linestyle="--",
++        label=f"Mean IC={mean_ic:.4f}",
++    )
++    ax.set_title("Monthly IC (Sentiment Score vs Next-Day Return)")
++    ax.set_xlabel("Date")
++    ax.set_ylabel("Spearman IC")
++    ax.legend()
++    save_and_show(fig, MONTHLY_IC_FIG)
++
++
++def print_ic_metrics(ic_df: pd.DataFrame) -> dict[str, float]:
++    mean_ic = ic_df["ic"].mean()
++    std_ic = ic_df["ic"].std()
++    ic_positive_pct = (ic_df["ic"] > 0).mean()
++    icir = np.nan if pd.isna(std_ic) or np.isclose(std_ic, 0) else mean_ic / std_ic
++
++    print("=" * 50)
++    print("Signal Quality Metrics")
++    print("=" * 50)
++    print(f"Mean IC:     {mean_ic:.4f}")
++    print(f"IC Std:      {std_ic:.4f}")
++    print(f"ICIR:        {icir:.4f}" if not pd.isna(icir) else "ICIR:        nan")
++    print(f"IC > 0 pct:  {ic_positive_pct:.1%}")
++    print(f"Num months:  {len(ic_df)}")
++
++    return {
++        "mean_ic": mean_ic,
++        "std_ic": std_ic,
++        "icir": icir,
++        "ic_positive_pct": ic_positive_pct,
++    }
++
++
++def run_ic_ttest(ic_df: pd.DataFrame) -> tuple[float, float]:
++    ic_series = ic_df["ic"].dropna()
++    if len(ic_series) < 2:
++        raise ValueError("At least two monthly IC observations are required for the t-test.")
++
++    t_stat, p_val = ttest_1samp(ic_series, 0)
++    print(f"\nIC t-test: t={t_stat:.3f}, p={p_val:.4f}")
++    print(f"Statistically significant (p<0.05): {p_val < 0.05}")
++    return t_stat, p_val
++
++
++def compute_signal_decay(df: pd.DataFrame) -> pd.DataFrame:
++    decay_results = []
++
++    for lag in DECAY_HORIZONS:
++        future_return = df["return_open"].shift(-lag)
++        clean = pd.DataFrame(
++            {
++                "signal": df["sentiment_score"],
++                "future_return": future_return,
++            }
++        ).dropna()
++        if clean.empty:
++            decay_results.append({"horizon": f"t+{lag}", "ic": np.nan, "p_value": np.nan, "n": 0})
++            continue
++
++        ic, p_value = stats.spearmanr(clean["signal"], clean["future_return"])
++        decay_results.append(
++            {
++                "horizon": f"t+{lag}",
++                "ic": ic,
++                "p_value": p_value,
++                "n": len(clean),
++            }
++        )
++
++    return pd.DataFrame(decay_results)
++
++
++def print_signal_decay(decay_df: pd.DataFrame) -> None:
++    print("\nSignal Decay Analysis:")
++    print(decay_df.to_string(index=False))
++
++
++def plot_signal_decay(decay_df: pd.DataFrame) -> None:
++    fig, ax = plt.subplots(figsize=(8, 5))
++    ax.bar(decay_df["horizon"], decay_df["ic"], color=["#2196F3", "#64B5F6", "#BBDEFB"])
++    ax.axhline(y=0, color="black", linestyle="-", linewidth=0.5)
++    ax.set_title("Signal Decay: IC at Different Horizons")
++    ax.set_xlabel("Forecast Horizon")
++    ax.set_ylabel("Spearman IC")
++
++    for i, row in decay_df.iterrows():
++        if pd.isna(row["ic"]):
++            continue
++        offset = 0.001 if row["ic"] >= 0 else -0.003
++        ax.text(i, row["ic"] + offset, f"{row['ic']:.4f}", ha="center", fontsize=10)
++
++    save_and_show(fig, SIGNAL_DECAY_FIG)
++
++
++def save_analysis_tables(ic_df: pd.DataFrame, decay_df: pd.DataFrame) -> None:
++    ic_to_save = ic_df.copy()
++    ic_to_save["period"] = ic_to_save["period"].astype(str)
++    ic_to_save.to_csv(MONTHLY_IC_OUTPUT, index=False)
++    decay_df.to_csv(SIGNAL_DECAY_OUTPUT, index=False)
++    print(f"Saved {MONTHLY_IC_OUTPUT}")
++    print(f"Saved {SIGNAL_DECAY_OUTPUT}")
++
++
++def main() -> None:
++    input_path = Path(INPUT_FILE)
++    if not input_path.exists():
++        raise FileNotFoundError(
++            f"Input file not found: {input_path.resolve()}. "
++            "Run task_002_feature_engineering.py first to generate hsi_features.csv."
++        )
++
++    configure_plot_style()
++    df = load_data(str(input_path))
++    validate_columns(df)
++
++    ic_df = compute_monthly_ic(df)
++    plot_monthly_ic(ic_df)
++    print_ic_metrics(ic_df)
++    run_ic_ttest(ic_df)
++
++    decay_df = compute_signal_decay(df)
++    print_signal_decay(decay_df)
++    plot_signal_decay(decay_df)
++
++    save_analysis_tables(ic_df, decay_df)
++
++
++if __name__ == "__main__":
++    main()
+
+file update:
+diff --git a/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_004_signal_analysis.py b/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_004_signal_analysis.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..34425093a6cf6f0a18b79edac95b99a6229d6af1
+--- /dev/null
++++ b/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_004_signal_analysis.py
+@@ -0,0 +1,221 @@
++from pathlib import Path
++
++import matplotlib.pyplot as plt
++import numpy as np
++import pandas as pd
++import seaborn as sns
++from scipy import stats
++from scipy.stats import ttest_1samp
++
++
++INPUT_FILE = "hsi_features.csv"
++MONTHLY_IC_FIG = "fig_08_monthly_ic.png"
++SIGNAL_DECAY_FIG = "fig_09_signal_decay.png"
++MONTHLY_IC_OUTPUT = "monthly_ic.csv"
++SIGNAL_DECAY_OUTPUT = "signal_decay.csv"
++MIN_MONTHLY_OBSERVATIONS = 5
++DECAY_HORIZONS = [1, 2, 3]
++FONT_SIZE = 12
++
++
++def load_data(file_path: str) -> pd.DataFrame:
++    print(f"Loading feature data from {file_path}...")
++    df = pd.read_csv(file_path)
++    if "Date" in df.columns:
++        df["Date"] = pd.to_datetime(df["Date"])
++        df = df.sort_values("Date").reset_index(drop=True)
++    print("Feature data loaded.")
++    return df
++
++
++def validate_columns(df: pd.DataFrame) -> None:
++    required_columns = {"Date", "sentiment_score", "return_open"}
++    missing_columns = required_columns.difference(df.columns)
++    if missing_columns:
++        missing_str = ", ".join(sorted(missing_columns))
++        raise ValueError(f"Missing required columns: {missing_str}")
++
++
++def configure_plot_style() -> None:
++    plt.rcParams["font.size"] = FONT_SIZE
++    sns.set_style("whitegrid")
++
++
++def save_and_show(fig: plt.Figure, output_path: str) -> None:
++    fig.tight_layout()
++    fig.savefig(output_path, dpi=150, bbox_inches="tight")
++    plt.show()
++    plt.close(fig)
++    print(f"Saved {output_path}")
++
++
++def compute_monthly_ic(df: pd.DataFrame) -> pd.DataFrame:
++    working = df.copy()
++    working["year_month"] = working["Date"].dt.to_period("M")
++    monthly_ic = []
++
++    for period, group in working.groupby("year_month"):
++        clean = group[["sentiment_score", "return_open"]].dropna()
++        if len(clean) < MIN_MONTHLY_OBSERVATIONS:
++            continue
++
++        ic, p_value = stats.spearmanr(clean["sentiment_score"], clean["return_open"])
++        monthly_ic.append(
++            {
++                "period": period,
++                "ic": ic,
++                "p_value": p_value,
++                "n": len(clean),
++            }
++        )
++
++    ic_df = pd.DataFrame(monthly_ic)
++    if ic_df.empty:
++        raise ValueError(
++            "No monthly IC values were produced. Check that hsi_features.csv has enough "
++            "non-null sentiment_score and return_open observations per month."
++        )
++
++    ic_df["period_dt"] = ic_df["period"].dt.to_timestamp()
++    return ic_df
++
++
++def plot_monthly_ic(ic_df: pd.DataFrame) -> None:
++    mean_ic = ic_df["ic"].mean()
++    colors = ["green" if x > 0 else "red" for x in ic_df["ic"]]
++
++    fig, ax = plt.subplots(figsize=(14, 5))
++    ax.bar(ic_df["period_dt"], ic_df["ic"], width=20, color=colors, alpha=0.7)
++    ax.axhline(y=0, color="black", linestyle="-", linewidth=0.5)
++    ax.axhline(
++        y=mean_ic,
++        color="blue",
++        linestyle="--",
++        label=f"Mean IC={mean_ic:.4f}",
++    )
++    ax.set_title("Monthly IC (Sentiment Score vs Next-Day Return)")
++    ax.set_xlabel("Date")
++    ax.set_ylabel("Spearman IC")
++    ax.legend()
++    save_and_show(fig, MONTHLY_IC_FIG)
++
++
++def print_ic_metrics(ic_df: pd.DataFrame) -> dict[str, float]:
++    mean_ic = ic_df["ic"].mean()
++    std_ic = ic_df["ic"].std()
++    ic_positive_pct = (ic_df["ic"] > 0).mean()
++    icir = np.nan if pd.isna(std_ic) or np.isclose(std_ic, 0) else mean_ic / std_ic
++
++    print("=" * 50)
++    print("Signal Quality Metrics")
++    print("=" * 50)
++    print(f"Mean IC:     {mean_ic:.4f}")
++    print(f"IC Std:      {std_ic:.4f}")
++    print(f"ICIR:        {icir:.4f}" if not pd.isna(icir) else "ICIR:        nan")
++    print(f"IC > 0 pct:  {ic_positive_pct:.1%}")
++    print(f"Num months:  {len(ic_df)}")
++
++    return {
++        "mean_ic": mean_ic,
++        "std_ic": std_ic,
++        "icir": icir,
++        "ic_positive_pct": ic_positive_pct,
++    }
++
++
++def run_ic_ttest(ic_df: pd.DataFrame) -> tuple[float, float]:
++    ic_series = ic_df["ic"].dropna()
++    if len(ic_series) < 2:
++        raise ValueError("At least two monthly IC observations are required for the t-test.")
++
++    t_stat, p_val = ttest_1samp(ic_series, 0)
++    print(f"\nIC t-test: t={t_stat:.3f}, p={p_val:.4f}")
++    print(f"Statistically significant (p<0.05): {p_val < 0.05}")
++    return t_stat, p_val
++
++
++def compute_signal_decay(df: pd.DataFrame) -> pd.DataFrame:
++    decay_results = []
++
++    for lag in DECAY_HORIZONS:
++        future_return = df["return_open"].shift(-lag)
++        clean = pd.DataFrame(
++            {
++                "signal": df["sentiment_score"],
++                "future_return": future_return,
++            }
++        ).dropna()
++        if clean.empty:
++            decay_results.append({"horizon": f"t+{lag}", "ic": np.nan, "p_value": np.nan, "n": 0})
++            continue
++
++        ic, p_value = stats.spearmanr(clean["signal"], clean["future_return"])
++        decay_results.append(
++            {
++                "horizon": f"t+{lag}",
++                "ic": ic,
++                "p_value": p_value,
++                "n": len(clean),
++            }
++        )
++
++    return pd.DataFrame(decay_results)
++
++
++def print_signal_decay(decay_df: pd.DataFrame) -> None:
++    print("\nSignal Decay Analysis:")
++    print(decay_df.to_string(index=False))
++
++
++def plot_signal_decay(decay_df: pd.DataFrame) -> None:
++    fig, ax = plt.subplots(figsize=(8, 5))
++    ax.bar(decay_df["horizon"], decay_df["ic"], color=["#2196F3", "#64B5F6", "#BBDEFB"])
++    ax.axhline(y=0, color="black", linestyle="-", linewidth=0.5)
++    ax.set_title("Signal Decay: IC at Different Horizons")
++    ax.set_xlabel("Forecast Horizon")
++    ax.set_ylabel("Spearman IC")
++
++    for i, row in decay_df.iterrows():
++        if pd.isna(row["ic"]):
++            continue
++        offset = 0.001 if row["ic"] >= 0 else -0.003
++        ax.text(i, row["ic"] + offset, f"{row['ic']:.4f}", ha="center", fontsize=10)
++
++    save_and_show(fig, SIGNAL_DECAY_FIG)
++
++
++def save_analysis_tables(ic_df: pd.DataFrame, decay_df: pd.DataFrame) -> None:
++    ic_to_save = ic_df.copy()
++    ic_to_save["period"] = ic_to_save["period"].astype(str)
++    ic_to_save.to_csv(MONTHLY_IC_OUTPUT, index=False)
++    decay_df.to_csv(SIGNAL_DECAY_OUTPUT, index=False)
++    print(f"Saved {MONTHLY_IC_OUTPUT}")
++    print(f"Saved {SIGNAL_DECAY_OUTPUT}")
++
++
++def main() -> None:
++    input_path = Path(INPUT_FILE)
++    if not input_path.exists():
++        raise FileNotFoundError(
++            f"Input file not found: {input_path.resolve()}. "
++            "Run task_002_feature_engineering.py first to generate hsi_features.csv."
++        )
++
++    configure_plot_style()
++    df = load_data(str(input_path))
++    validate_columns(df)
++
++    ic_df = compute_monthly_ic(df)
++    plot_monthly_ic(ic_df)
++    print_ic_metrics(ic_df)
++    run_ic_ttest(ic_df)
++
++    decay_df = compute_signal_decay(df)
++    print_signal_decay(decay_df)
++    plot_signal_decay(decay_df)
++
++    save_analysis_tables(ic_df, decay_df)
++
++
++if __name__ == "__main__":
++    main()
+
+codex
+脚本已经落地。我先做静态验证和轻量运行检查，确认语法、导入和主流程没有明显问题；由于输入 CSV 当前不在目录里，完整执行可能只能验证到文件存在性检查。
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command 'python task_004_signal_analysis.py' in C:\Coding\AI-factory-projects\quantitative-research-workflow\codeexec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command 'python -m py_compile task_004_signal_analysis.py' in C:\Coding\AI-factory-projects\quantitative-research-workflow\code succeeded in 338ms:
+
+ exited 1 in 2.09s:
+Traceback (most recent call last):
+  File "C:\Coding\AI-factory-projects\quantitative-research-workflow\code\task_004_signal_analysis.py", line 221, in <module>
+    main()
+    ~~~~^^
+  File "C:\Coding\AI-factory-projects\quantitative-research-workflow\code\task_004_signal_analysis.py", line 199, in main
+    raise FileNotFoundError(
+    ...<2 lines>...
+    )
+FileNotFoundError: Input file not found: C:\Coding\AI-factory-projects\quantitative-research-workflow\code\hsi_features.csv. Run task_002_feature_engineering.py first to generate hsi_features.csv.
+file update:
+diff --git a/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_004_signal_analysis.py b/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_004_signal_analysis.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..34425093a6cf6f0a18b79edac95b99a6229d6af1
+--- /dev/null
++++ b/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_004_signal_analysis.py
+@@ -0,0 +1,221 @@
++from pathlib import Path
++
++import matplotlib.pyplot as plt
++import numpy as np
++import pandas as pd
++import seaborn as sns
++from scipy import stats
++from scipy.stats import ttest_1samp
++
++
++INPUT_FILE = "hsi_features.csv"
++MONTHLY_IC_FIG = "fig_08_monthly_ic.png"
++SIGNAL_DECAY_FIG = "fig_09_signal_decay.png"
++MONTHLY_IC_OUTPUT = "monthly_ic.csv"
++SIGNAL_DECAY_OUTPUT = "signal_decay.csv"
++MIN_MONTHLY_OBSERVATIONS = 5
++DECAY_HORIZONS = [1, 2, 3]
++FONT_SIZE = 12
++
++
++def load_data(file_path: str) -> pd.DataFrame:
++    print(f"Loading feature data from {file_path}...")
++    df = pd.read_csv(file_path)
++    if "Date" in df.columns:
++        df["Date"] = pd.to_datetime(df["Date"])
++        df = df.sort_values("Date").reset_index(drop=True)
++    print("Feature data loaded.")
++    return df
++
++
++def validate_columns(df: pd.DataFrame) -> None:
++    required_columns = {"Date", "sentiment_score", "return_open"}
++    missing_columns = required_columns.difference(df.columns)
++    if missing_columns:
++        missing_str = ", ".join(sorted(missing_columns))
++        raise ValueError(f"Missing required columns: {missing_str}")
++
++
++def configure_plot_style() -> None:
++    plt.rcParams["font.size"] = FONT_SIZE
++    sns.set_style("whitegrid")
++
++
++def save_and_show(fig: plt.Figure, output_path: str) -> None:
++    fig.tight_layout()
++    fig.savefig(output_path, dpi=150, bbox_inches="tight")
++    plt.show()
++    plt.close(fig)
++    print(f"Saved {output_path}")
++
++
++def compute_monthly_ic(df: pd.DataFrame) -> pd.DataFrame:
++    working = df.copy()
++    working["year_month"] = working["Date"].dt.to_period("M")
++    monthly_ic = []
++
++    for period, group in working.groupby("year_month"):
++        clean = group[["sentiment_score", "return_open"]].dropna()
++        if len(clean) < MIN_MONTHLY_OBSERVATIONS:
++            continue
++
++        ic, p_value = stats.spearmanr(clean["sentiment_score"], clean["return_open"])
++        monthly_ic.append(
++            {
++                "period": period,
++                "ic": ic,
++                "p_value": p_value,
++                "n": len(clean),
++            }
++        )
++
++    ic_df = pd.DataFrame(monthly_ic)
++    if ic_df.empty:
++        raise ValueError(
++            "No monthly IC values were produced. Check that hsi_features.csv has enough "
++            "non-null sentiment_score and return_open observations per month."
++        )
++
++    ic_df["period_dt"] = ic_df["period"].dt.to_timestamp()
++    return ic_df
++
++
++def plot_monthly_ic(ic_df: pd.DataFrame) -> None:
++    mean_ic = ic_df["ic"].mean()
++    colors = ["green" if x > 0 else "red" for x in ic_df["ic"]]
++
++    fig, ax = plt.subplots(figsize=(14, 5))
++    ax.bar(ic_df["period_dt"], ic_df["ic"], width=20, color=colors, alpha=0.7)
++    ax.axhline(y=0, color="black", linestyle="-", linewidth=0.5)
++    ax.axhline(
++        y=mean_ic,
++        color="blue",
++        linestyle="--",
++        label=f"Mean IC={mean_ic:.4f}",
++    )
++    ax.set_title("Monthly IC (Sentiment Score vs Next-Day Return)")
++    ax.set_xlabel("Date")
++    ax.set_ylabel("Spearman IC")
++    ax.legend()
++    save_and_show(fig, MONTHLY_IC_FIG)
++
++
++def print_ic_metrics(ic_df: pd.DataFrame) -> dict[str, float]:
++    mean_ic = ic_df["ic"].mean()
++    std_ic = ic_df["ic"].std()
++    ic_positive_pct = (ic_df["ic"] > 0).mean()
++    icir = np.nan if pd.isna(std_ic) or np.isclose(std_ic, 0) else mean_ic / std_ic
++
++    print("=" * 50)
++    print("Signal Quality Metrics")
++    print("=" * 50)
++    print(f"Mean IC:     {mean_ic:.4f}")
++    print(f"IC Std:      {std_ic:.4f}")
++    print(f"ICIR:        {icir:.4f}" if not pd.isna(icir) else "ICIR:        nan")
++    print(f"IC > 0 pct:  {ic_positive_pct:.1%}")
++    print(f"Num months:  {len(ic_df)}")
++
++    return {
++        "mean_ic": mean_ic,
++        "std_ic": std_ic,
++        "icir": icir,
++        "ic_positive_pct": ic_positive_pct,
++    }
++
++
++def run_ic_ttest(ic_df: pd.DataFrame) -> tuple[float, float]:
++    ic_series = ic_df["ic"].dropna()
++    if len(ic_series) < 2:
++        raise ValueError("At least two monthly IC observations are required for the t-test.")
++
++    t_stat, p_val = ttest_1samp(ic_series, 0)
++    print(f"\nIC t-test: t={t_stat:.3f}, p={p_val:.4f}")
++    print(f"Statistically significant (p<0.05): {p_val < 0.05}")
++    return t_stat, p_val
++
++
++def compute_signal_decay(df: pd.DataFrame) -> pd.DataFrame:
++    decay_results = []
++
++    for lag in DECAY_HORIZONS:
++        future_return = df["return_open"].shift(-lag)
++        clean = pd.DataFrame(
++            {
++                "signal": df["sentiment_score"],
++                "future_return": future_return,
++            }
++        ).dropna()
++        if clean.empty:
++            decay_results.append({"horizon": f"t+{lag}", "ic": np.nan, "p_value": np.nan, "n": 0})
++            continue
++
++        ic, p_value = stats.spearmanr(clean["signal"], clean["future_return"])
++        decay_results.append(
++            {
++                "horizon": f"t+{lag}",
++                "ic": ic,
++                "p_value": p_value,
++                "n": len(clean),
++            }
++        )
++
++    return pd.DataFrame(decay_results)
++
++
++def print_signal_decay(decay_df: pd.DataFrame) -> None:
++    print("\nSignal Decay Analysis:")
++    print(decay_df.to_string(index=False))
++
++
++def plot_signal_decay(decay_df: pd.DataFrame) -> None:
++    fig, ax = plt.subplots(figsize=(8, 5))
++    ax.bar(decay_df["horizon"], decay_df["ic"], color=["#2196F3", "#64B5F6", "#BBDEFB"])
++    ax.axhline(y=0, color="black", linestyle="-", linewidth=0.5)
++    ax.set_title("Signal Decay: IC at Different Horizons")
++    ax.set_xlabel("Forecast Horizon")
++    ax.set_ylabel("Spearman IC")
++
++    for i, row in decay_df.iterrows():
++        if pd.isna(row["ic"]):
++            continue
++        offset = 0.001 if row["ic"] >= 0 else -0.003
++        ax.text(i, row["ic"] + offset, f"{row['ic']:.4f}", ha="center", fontsize=10)
++
++    save_and_show(fig, SIGNAL_DECAY_FIG)
++
++
++def save_analysis_tables(ic_df: pd.DataFrame, decay_df: pd.DataFrame) -> None:
++    ic_to_save = ic_df.copy()
++    ic_to_save["period"] = ic_to_save["period"].astype(str)
++    ic_to_save.to_csv(MONTHLY_IC_OUTPUT, index=False)
++    decay_df.to_csv(SIGNAL_DECAY_OUTPUT, index=False)
++    print(f"Saved {MONTHLY_IC_OUTPUT}")
++    print(f"Saved {SIGNAL_DECAY_OUTPUT}")
++
++
++def main() -> None:
++    input_path = Path(INPUT_FILE)
++    if not input_path.exists():
++        raise FileNotFoundError(
++            f"Input file not found: {input_path.resolve()}. "
++            "Run task_002_feature_engineering.py first to generate hsi_features.csv."
++        )
++
++    configure_plot_style()
++    df = load_data(str(input_path))
++    validate_columns(df)
++
++    ic_df = compute_monthly_ic(df)
++    plot_monthly_ic(ic_df)
++    print_ic_metrics(ic_df)
++    run_ic_ttest(ic_df)
++
++    decay_df = compute_signal_decay(df)
++    print_signal_decay(decay_df)
++    plot_signal_decay(decay_df)
++
++    save_analysis_tables(ic_df, decay_df)
++
++
++if __name__ == "__main__":
++    main()
+
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command '$i=1; Get-Content task_004_signal_analysis.py | ForEach-Object { '"'{0,4}: {1}' -f "'$i, $_; $i++ }' in C:\Coding\AI-factory-projects\quantitative-research-workflow\code succeeded in 344ms:
+   1: from pathlib import Path
+   2: 
+   3: import matplotlib.pyplot as plt
+   4: import numpy as np
+   5: import pandas as pd
+   6: import seaborn as sns
+   7: from scipy import stats
+   8: from scipy.stats import ttest_1samp
+   9: 
+  10: 
+  11: INPUT_FILE = "hsi_features.csv"
+  12: MONTHLY_IC_FIG = "fig_08_monthly_ic.png"
+  13: SIGNAL_DECAY_FIG = "fig_09_signal_decay.png"
+  14: MONTHLY_IC_OUTPUT = "monthly_ic.csv"
+  15: SIGNAL_DECAY_OUTPUT = "signal_decay.csv"
+  16: MIN_MONTHLY_OBSERVATIONS = 5
+  17: DECAY_HORIZONS = [1, 2, 3]
+  18: FONT_SIZE = 12
+  19: 
+  20: 
+file update:
+diff --git a/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_004_signal_analysis.py b/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_004_signal_analysis.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..34425093a6cf6f0a18b79edac95b99a6229d6af1
+--- /dev/null
++++ b/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_004_signal_analysis.py
+@@ -0,0 +1,221 @@
++from pathlib import Path
++
++import matplotlib.pyplot as plt
++import numpy as np
++import pandas as pd
++import seaborn as sns
++from scipy import stats
++from scipy.stats import ttest_1samp
++
++
++INPUT_FILE = "hsi_features.csv"
++MONTHLY_IC_FIG = "fig_08_monthly_ic.png"
++SIGNAL_DECAY_FIG = "fig_09_signal_decay.png"
++MONTHLY_IC_OUTPUT = "monthly_ic.csv"
++SIGNAL_DECAY_OUTPUT = "signal_decay.csv"
++MIN_MONTHLY_OBSERVATIONS = 5
++DECAY_HORIZONS = [1, 2, 3]
++FONT_SIZE = 12
++
++
++def load_data(file_path: str) -> pd.DataFrame:
++    print(f"Loading feature data from {file_path}...")
++    df = pd.read_csv(file_path)
++    if "Date" in df.columns:
++        df["Date"] = pd.to_datetime(df["Date"])
++        df = df.sort_values("Date").reset_index(drop=True)
++    print("Feature data loaded.")
++    return df
++
++
++def validate_columns(df: pd.DataFrame) -> None:
++    required_columns = {"Date", "sentiment_score", "return_open"}
++    missing_columns = required_columns.difference(df.columns)
++    if missing_columns:
++        missing_str = ", ".join(sorted(missing_columns))
++        raise ValueError(f"Missing required columns: {missing_str}")
++
++
++def configure_plot_style() -> None:
++    plt.rcParams["font.size"] = FONT_SIZE
++    sns.set_style("whitegrid")
++
++
++def save_and_show(fig: plt.Figure, output_path: str) -> None:
++    fig.tight_layout()
++    fig.savefig(output_path, dpi=150, bbox_inches="tight")
++    plt.show()
++    plt.close(fig)
++    print(f"Saved {output_path}")
++
++
++def compute_monthly_ic(df: pd.DataFrame) -> pd.DataFrame:
++    working = df.copy()
++    working["year_month"] = working["Date"].dt.to_period("M")
++    monthly_ic = []
++
++    for period, group in working.groupby("year_month"):
++        clean = group[["sentiment_score", "return_open"]].dropna()
++        if len(clean) < MIN_MONTHLY_OBSERVATIONS:
++            continue
++
++        ic, p_value = stats.spearmanr(clean["sentiment_score"], clean["return_open"])
++        monthly_ic.append(
++            {
++                "period": period,
++                "ic": ic,
++                "p_value": p_value,
++                "n": len(clean),
++            }
++        )
++
++    ic_df = pd.DataFrame(monthly_ic)
++    if ic_df.empty:
++        raise ValueError(
++            "No monthly IC values were produced. Check that hsi_features.csv has enough "
++            "non-null sentiment_score and return_open observations per month."
++        )
++
++    ic_df["period_dt"] = ic_df["period"].dt.to_timestamp()
++    return ic_df
++
++
++def plot_monthly_ic(ic_df: pd.DataFrame) -> None:
++    mean_ic = ic_df["ic"].mean()
++    colors = ["green" if x > 0 else "red" for x in ic_df["ic"]]
++
++    fig, ax = plt.subplots(figsize=(14, 5))
++    ax.bar(ic_df["period_dt"], ic_df["ic"], width=20, color=colors, alpha=0.7)
++    ax.axhline(y=0, color="black", linestyle="-", linewidth=0.5)
++    ax.axhline(
++        y=mean_ic,
++        color="blue",
++        linestyle="--",
++        label=f"Mean IC={mean_ic:.4f}",
++    )
++    ax.set_title("Monthly IC (Sentiment Score vs Next-Day Return)")
++    ax.set_xlabel("Date")
++    ax.set_ylabel("Spearman IC")
++    ax.legend()
++    save_and_show(fig, MONTHLY_IC_FIG)
++
++
++def print_ic_metrics(ic_df: pd.DataFrame) -> dict[str, float]:
++    mean_ic = ic_df["ic"].mean()
++    std_ic = ic_df["ic"].std()
++    ic_positive_pct = (ic_df["ic"] > 0).mean()
++    icir = np.nan if pd.isna(std_ic) or np.isclose(std_ic, 0) else mean_ic / std_ic
++
++    print("=" * 50)
++    print("Signal Quality Metrics")
++    print("=" * 50)
++    print(f"Mean IC:     {mean_ic:.4f}")
++    print(f"IC Std:      {std_ic:.4f}")
++    print(f"ICIR:        {icir:.4f}" if not pd.isna(icir) else "ICIR:        nan")
++    print(f"IC > 0 pct:  {ic_positive_pct:.1%}")
++    print(f"Num months:  {len(ic_df)}")
++
++    return {
++        "mean_ic": mean_ic,
++        "std_ic": std_ic,
++        "icir": icir,
++        "ic_positive_pct": ic_positive_pct,
++    }
++
++
++def run_ic_ttest(ic_df: pd.DataFrame) -> tuple[float, float]:
++    ic_series = ic_df["ic"].dropna()
++    if len(ic_series) < 2:
++        raise ValueError("At least two monthly IC observations are required for the t-test.")
++
++    t_stat, p_val = ttest_1samp(ic_series, 0)
++    print(f"\nIC t-test: t={t_stat:.3f}, p={p_val:.4f}")
++    print(f"Statistically significant (p<0.05): {p_val < 0.05}")
++    return t_stat, p_val
++
++
++def compute_signal_decay(df: pd.DataFrame) -> pd.DataFrame:
++    decay_results = []
++
++    for lag in DECAY_HORIZONS:
++        future_return = df["return_open"].shift(-lag)
++        clean = pd.DataFrame(
++            {
++                "signal": df["sentiment_score"],
++                "future_return": future_return,
++            }
++        ).dropna()
++        if clean.empty:
++            decay_results.append({"horizon": f"t+{lag}", "ic": np.nan, "p_value": np.nan, "n": 0})
++            continue
++
++        ic, p_value = stats.spearmanr(clean["signal"], clean["future_return"])
++        decay_results.append(
++            {
++                "horizon": f"t+{lag}",
++                "ic": ic,
++                "p_value": p_value,
++                "n": len(clean),
++            }
++        )
++
++    return pd.DataFrame(decay_results)
++
++
++def print_signal_decay(decay_df: pd.DataFrame) -> None:
++    print("\nSignal Decay Analysis:")
++    print(decay_df.to_string(index=False))
++
++
++def plot_signal_decay(decay_df: pd.DataFrame) -> None:
++    fig, ax = plt.subplots(figsize=(8, 5))
++    ax.bar(decay_df["horizon"], decay_df["ic"], color=["#2196F3", "#64B5F6", "#BBDEFB"])
++    ax.axhline(y=0, color="black", linestyle="-", linewidth=0.5)
++    ax.set_title("Signal Decay: IC at Different Horizons")
++    ax.set_xlabel("Forecast Horizon")
++    ax.set_ylabel("Spearman IC")
++
++    for i, row in decay_df.iterrows():
++        if pd.isna(row["ic"]):
++            continue
++        offset = 0.001 if row["ic"] >= 0 else -0.003
++        ax.text(i, row["ic"] + offset, f"{row['ic']:.4f}", ha="center", fontsize=10)
++
++    save_and_show(fig, SIGNAL_DECAY_FIG)
++
++
++def save_analysis_tables(ic_df: pd.DataFrame, decay_df: pd.DataFrame) -> None:
++    ic_to_save = ic_df.copy()
++    ic_to_save["period"] = ic_to_save["period"].astype(str)
++    ic_to_save.to_csv(MONTHLY_IC_OUTPUT, index=False)
++    decay_df.to_csv(SIGNAL_DECAY_OUTPUT, index=False)
++    print(f"Saved {MONTHLY_IC_OUTPUT}")
++    print(f"Saved {SIGNAL_DECAY_OUTPUT}")
++
++
++def main() -> None:
++    input_path = Path(INPUT_FILE)
++    if not input_path.exists():
++        raise FileNotFoundError(
++            f"Input file not found: {input_path.resolve()}. "
++            "Run task_002_feature_engineering.py first to generate hsi_features.csv."
++        )
++
++    configure_plot_style()
++    df = load_data(str(input_path))
++    validate_columns(df)
++
++    ic_df = compute_monthly_ic(df)
++    plot_monthly_ic(ic_df)
++    print_ic_metrics(ic_df)
++    run_ic_ttest(ic_df)
++
++    decay_df = compute_signal_decay(df)
++    print_signal_decay(decay_df)
++    plot_signal_decay(decay_df)
++
++    save_analysis_tables(ic_df, decay_df)
++
++
++if __name__ == "__main__":
++    main()
+
+codex
+已新增 [task_004_signal_analysis.py](C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_004_signal_analysis.py#L1)。这个脚本按现有任务风格实现了完整的信号分析流程：月度 IC 计算与时序图、ICIR 打印、IC 序列 t-test、Signal Decay 分析与图表，以及月度 IC / decay 结果表落盘，核心逻辑分别在 [compute_monthly_ic](C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_004_signal_analysis.py#L52)、[print_ic_metrics](C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_004_signal_analysis.py#L103)、[run_ic_ttest](C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_004_signal_analysis.py#L126)、[compute_signal_decay](C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_004_signal_analysis.py#L137)。
+
+另外补了几个必要的边界处理：月度样本不足时跳过、无有效 IC 时抛出清晰错误、IC 标准差为 0 时避免错误计算 ICIR。脚本会输出 `fig_08_monthly_ic.png`、`fig_09_signal_decay.png`，并额外保存 `monthly_ic.csv` 和 `signal_decay.csv` 便于后续复用。
+
+验证方面，`python -m py_compile task_004_signal_analysis.py` 已通过；完整运行目前被输入文件缺失阻断，当前工作目录里没有 `hsi_features.csv`，所以执行会在 [main](C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_004_signal_analysis.py#L196) 的文件检查处退出。把 Task 002 的输出放到 `code/hsi_features.csv` 后，运行 `python task_004_signal_analysis.py` 即可生成结果。
+file update:
+diff --git a/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_004_signal_analysis.py b/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_004_signal_analysis.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..34425093a6cf6f0a18b79edac95b99a6229d6af1
+--- /dev/null
++++ b/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_004_signal_analysis.py
+@@ -0,0 +1,221 @@
++from pathlib import Path
++
++import matplotlib.pyplot as plt
++import numpy as np
++import pandas as pd
++import seaborn as sns
++from scipy import stats
++from scipy.stats import ttest_1samp
++
++
++INPUT_FILE = "hsi_features.csv"
++MONTHLY_IC_FIG = "fig_08_monthly_ic.png"
++SIGNAL_DECAY_FIG = "fig_09_signal_decay.png"
++MONTHLY_IC_OUTPUT = "monthly_ic.csv"
++SIGNAL_DECAY_OUTPUT = "signal_decay.csv"
++MIN_MONTHLY_OBSERVATIONS = 5
++DECAY_HORIZONS = [1, 2, 3]
++FONT_SIZE = 12
++
++
++def load_data(file_path: str) -> pd.DataFrame:
++    print(f"Loading feature data from {file_path}...")
++    df = pd.read_csv(file_path)
++    if "Date" in df.columns:
++        df["Date"] = pd.to_datetime(df["Date"])
++        df = df.sort_values("Date").reset_index(drop=True)
++    print("Feature data loaded.")
++    return df
++
++
++def validate_columns(df: pd.DataFrame) -> None:
++    required_columns = {"Date", "sentiment_score", "return_open"}
++    missing_columns = required_columns.difference(df.columns)
++    if missing_columns:
++        missing_str = ", ".join(sorted(missing_columns))
++        raise ValueError(f"Missing required columns: {missing_str}")
++
++
++def configure_plot_style() -> None:
++    plt.rcParams["font.size"] = FONT_SIZE
++    sns.set_style("whitegrid")
++
++
++def save_and_show(fig: plt.Figure, output_path: str) -> None:
++    fig.tight_layout()
++    fig.savefig(output_path, dpi=150, bbox_inches="tight")
++    plt.show()
++    plt.close(fig)
++    print(f"Saved {output_path}")
++
++
++def compute_monthly_ic(df: pd.DataFrame) -> pd.DataFrame:
++    working = df.copy()
++    working["year_month"] = working["Date"].dt.to_period("M")
++    monthly_ic = []
++
++    for period, group in working.groupby("year_month"):
++        clean = group[["sentiment_score", "return_open"]].dropna()
++        if len(clean) < MIN_MONTHLY_OBSERVATIONS:
++            continue
++
++        ic, p_value = stats.spearmanr(clean["sentiment_score"], clean["return_open"])
++        monthly_ic.append(
++            {
++                "period": period,
++                "ic": ic,
++                "p_value": p_value,
++                "n": len(clean),
++            }
++        )
++
++    ic_df = pd.DataFrame(monthly_ic)
++    if ic_df.empty:
++        raise ValueError(
++            "No monthly IC values were produced. Check that hsi_features.csv has enough "
++            "non-null sentiment_score and return_open observations per month."
++        )
++
++    ic_df["period_dt"] = ic_df["period"].dt.to_timestamp()
++    return ic_df
++
++
++def plot_monthly_ic(ic_df: pd.DataFrame) -> None:
++    mean_ic = ic_df["ic"].mean()
++    colors = ["green" if x > 0 else "red" for x in ic_df["ic"]]
++
++    fig, ax = plt.subplots(figsize=(14, 5))
++    ax.bar(ic_df["period_dt"], ic_df["ic"], width=20, color=colors, alpha=0.7)
++    ax.axhline(y=0, color="black", linestyle="-", linewidth=0.5)
++    ax.axhline(
++        y=mean_ic,
++        color="blue",
++        linestyle="--",
++        label=f"Mean IC={mean_ic:.4f}",
++    )
++    ax.set_title("Monthly IC (Sentiment Score vs Next-Day Return)")
++    ax.set_xlabel("Date")
++    ax.set_ylabel("Spearman IC")
++    ax.legend()
++    save_and_show(fig, MONTHLY_IC_FIG)
++
++
++def print_ic_metrics(ic_df: pd.DataFrame) -> dict[str, float]:
++    mean_ic = ic_df["ic"].mean()
++    std_ic = ic_df["ic"].std()
++    ic_positive_pct = (ic_df["ic"] > 0).mean()
++    icir = np.nan if pd.isna(std_ic) or np.isclose(std_ic, 0) else mean_ic / std_ic
++
++    print("=" * 50)
++    print("Signal Quality Metrics")
++    print("=" * 50)
++    print(f"Mean IC:     {mean_ic:.4f}")
++    print(f"IC Std:      {std_ic:.4f}")
++    print(f"ICIR:        {icir:.4f}" if not pd.isna(icir) else "ICIR:        nan")
++    print(f"IC > 0 pct:  {ic_positive_pct:.1%}")
++    print(f"Num months:  {len(ic_df)}")
++
++    return {
++        "mean_ic": mean_ic,
++        "std_ic": std_ic,
++        "icir": icir,
++        "ic_positive_pct": ic_positive_pct,
++    }
++
++
++def run_ic_ttest(ic_df: pd.DataFrame) -> tuple[float, float]:
++    ic_series = ic_df["ic"].dropna()
++    if len(ic_series) < 2:
++        raise ValueError("At least two monthly IC observations are required for the t-test.")
++
++    t_stat, p_val = ttest_1samp(ic_series, 0)
++    print(f"\nIC t-test: t={t_stat:.3f}, p={p_val:.4f}")
++    print(f"Statistically significant (p<0.05): {p_val < 0.05}")
++    return t_stat, p_val
++
++
++def compute_signal_decay(df: pd.DataFrame) -> pd.DataFrame:
++    decay_results = []
++
++    for lag in DECAY_HORIZONS:
++        future_return = df["return_open"].shift(-lag)
++        clean = pd.DataFrame(
++            {
++                "signal": df["sentiment_score"],
++                "future_return": future_return,
++            }
++        ).dropna()
++        if clean.empty:
++            decay_results.append({"horizon": f"t+{lag}", "ic": np.nan, "p_value": np.nan, "n": 0})
++            continue
++
++        ic, p_value = stats.spearmanr(clean["signal"], clean["future_return"])
++        decay_results.append(
++            {
++                "horizon": f"t+{lag}",
++                "ic": ic,
++                "p_value": p_value,
++                "n": len(clean),
++            }
++        )
++
++    return pd.DataFrame(decay_results)
++
++
++def print_signal_decay(decay_df: pd.DataFrame) -> None:
++    print("\nSignal Decay Analysis:")
++    print(decay_df.to_string(index=False))
++
++
++def plot_signal_decay(decay_df: pd.DataFrame) -> None:
++    fig, ax = plt.subplots(figsize=(8, 5))
++    ax.bar(decay_df["horizon"], decay_df["ic"], color=["#2196F3", "#64B5F6", "#BBDEFB"])
++    ax.axhline(y=0, color="black", linestyle="-", linewidth=0.5)
++    ax.set_title("Signal Decay: IC at Different Horizons")
++    ax.set_xlabel("Forecast Horizon")
++    ax.set_ylabel("Spearman IC")
++
++    for i, row in decay_df.iterrows():
++        if pd.isna(row["ic"]):
++            continue
++        offset = 0.001 if row["ic"] >= 0 else -0.003
++        ax.text(i, row["ic"] + offset, f"{row['ic']:.4f}", ha="center", fontsize=10)
++
++    save_and_show(fig, SIGNAL_DECAY_FIG)
++
++
++def save_analysis_tables(ic_df: pd.DataFrame, decay_df: pd.DataFrame) -> None:
++    ic_to_save = ic_df.copy()
++    ic_to_save["period"] = ic_to_save["period"].astype(str)
++    ic_to_save.to_csv(MONTHLY_IC_OUTPUT, index=False)
++    decay_df.to_csv(SIGNAL_DECAY_OUTPUT, index=False)
++    print(f"Saved {MONTHLY_IC_OUTPUT}")
++    print(f"Saved {SIGNAL_DECAY_OUTPUT}")
++
++
++def main() -> None:
++    input_path = Path(INPUT_FILE)
++    if not input_path.exists():
++        raise FileNotFoundError(
++            f"Input file not found: {input_path.resolve()}. "
++            "Run task_002_feature_engineering.py first to generate hsi_features.csv."
++        )
++
++    configure_plot_style()
++    df = load_data(str(input_path))
++    validate_columns(df)
++
++    ic_df = compute_monthly_ic(df)
++    plot_monthly_ic(ic_df)
++    print_ic_metrics(ic_df)
++    run_ic_ttest(ic_df)
++
++    decay_df = compute_signal_decay(df)
++    print_signal_decay(decay_df)
++    plot_signal_decay(decay_df)
++
++    save_analysis_tables(ic_df, decay_df)
++
++
++if __name__ == "__main__":
++    main()
+
+tokens used
+17,247
+已新增 [task_004_signal_analysis.py](C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_004_signal_analysis.py#L1)。这个脚本按现有任务风格实现了完整的信号分析流程：月度 IC 计算与时序图、ICIR 打印、IC 序列 t-test、Signal Decay 分析与图表，以及月度 IC / decay 结果表落盘，核心逻辑分别在 [compute_monthly_ic](C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_004_signal_analysis.py#L52)、[print_ic_metrics](C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_004_signal_analysis.py#L103)、[run_ic_ttest](C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_004_signal_analysis.py#L126)、[compute_signal_decay](C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_004_signal_analysis.py#L137)。
+
+另外补了几个必要的边界处理：月度样本不足时跳过、无有效 IC 时抛出清晰错误、IC 标准差为 0 时避免错误计算 ICIR。脚本会输出 `fig_08_monthly_ic.png`、`fig_09_signal_decay.png`，并额外保存 `monthly_ic.csv` 和 `signal_decay.csv` 便于后续复用。
+
+验证方面，`python -m py_compile task_004_signal_analysis.py` 已通过；完整运行目前被输入文件缺失阻断，当前工作目录里没有 `hsi_features.csv`，所以执行会在 [main](C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_004_signal_analysis.py#L196) 的文件检查处退出。把 Task 002 的输出放到 `code/hsi_features.csv` 后，运行 `python task_004_signal_analysis.py` 即可生成结果。

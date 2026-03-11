@@ -1,0 +1,911 @@
+# Codex Log: Task 002 - Feature Engineering
+
+## Prompt
+
+# Task 002 — 收益率构建与情绪特征工程
+
+## 目标
+基于清洗后的 HSI 数据，构建所有分析所需的收益率序列和情绪特征，并为每个特征提供经济含义说明。
+
+## 工作目录
+`code/`
+
+## 依赖
+- `hsi_clean.csv`（Task 001 输出）
+
+## 输出文件
+- `task_002_feature_engineering.py` — 特征工程模块
+
+## 详细要求
+
+### 1. 收益率构建
+
+**主要收益率 — next-day open return（主信号对齐目标）**
+```python
+# return_t = (open_{t+1} - open_t) / open_t
+df['return_open'] = df['Open'].shift(-1) / df['Open'] - 1
+```
+
+说明：使用隔日开盘价收益率，模拟"收盘前获得情绪信号，次日开盘建仓"的交易场景，避免收盘价反转偏差。
+
+**辅助收益率 — close-to-close return（用于对比）**
+```python
+df['return_close'] = df['Close'].pct_change()
+```
+
+### 2. 情绪特征构建
+
+每个特征必须附带注释说明经济含义：
+
+```python
+# sentiment_score: 情绪净值，正值表示多头情绪占优，负值表示空头情绪
+df['sentiment_score'] = df['Up votes'] - df['Down votes']
+
+# vote_imbalance: 情绪强度，绝对值越大表示投票者共识越强
+df['vote_imbalance'] = (df['Up votes'] - df['Down votes']).abs()
+
+# extreme_bull: top 20% 情绪分位数，表示极度乐观市场状态
+q80 = df['sentiment_score'].quantile(0.8)
+df['extreme_bull'] = df['sentiment_score'] >= q80
+
+# extreme_bear: bottom 20% 情绪分位数，表示极度悲观市场状态
+q20 = df['sentiment_score'].quantile(0.2)
+df['extreme_bear'] = df['sentiment_score'] <= q20
+
+# 滞后信号：用于 Signal Decay 分析（t-n 的情绪预测 t+1 收益）
+df['sentiment_lag1'] = df['sentiment_score'].shift(1)
+df['sentiment_lag2'] = df['sentiment_score'].shift(2)
+df['sentiment_lag3'] = df['sentiment_score'].shift(3)
+```
+
+### 3. 情绪分位数标记
+```python
+# 将 sentiment_score 分为 5 个等分分位数（用于 EDA 分析）
+df['sentiment_quantile'] = pd.qcut(df['sentiment_score'], q=5, labels=['Q1','Q2','Q3','Q4','Q5'])
+```
+
+### 4. 保存特征数据
+```python
+df.to_csv('hsi_features.csv', index=False)
+print("Feature data saved to hsi_features.csv")
+
+# 打印特征统计
+feature_cols = ['sentiment_score', 'vote_imbalance', 'return_open', 'return_close']
+print(df[feature_cols].describe())
+print(f"\nExtreme bull days: {df['extreme_bull'].sum()}")
+print(f"Extreme bear days: {df['extreme_bear'].sum()}")
+```
+
+## 代码规范
+- 所有特征计算使用 pandas 矢量化操作（不用 for loop）
+- 每个特征用注释说明经济含义
+- 打印关键统计数据以便 Notebook 展示
+
+## 验收标准
+- [ ] return_open 使用 shift(-1)，无未来信息泄漏
+- [ ] 7 个情绪特征全部计算完成
+- [ ] extreme_bull/bear 各约 20% 的行被标记
+- [ ] sentiment_quantile 五分组分布均匀
+- [ ] hsi_features.csv 成功保存
+
+<!-- FACTORY:DONE -->
+
+
+## Output
+
+OpenAI Codex v0.111.0 (research preview)
+--------
+workdir: C:\Coding\AI-factory-projects\quantitative-research-workflow\code
+model: gpt-5.4
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, C:\Users\86579\.codex\memories]
+reasoning effort: none
+reasoning summaries: none
+session id: 019cdde1-42a5-7632-8b3e-357d4469a3b5
+--------
+user
+# Task 002 — 收益率构建与情绪特征工程
+
+## 目标
+基于清洗后的 HSI 数据，构建所有分析所需的收益率序列和情绪特征，并为每个特征提供经济含义说明。
+
+## 工作目录
+`code/`
+
+## 依赖
+- `hsi_clean.csv`（Task 001 输出）
+
+## 输出文件
+- `task_002_feature_engineering.py` — 特征工程模块
+
+## 详细要求
+
+### 1. 收益率构建
+
+**主要收益率 — next-day open return（主信号对齐目标）**
+```python
+# return_t = (open_{t+1} - open_t) / open_t
+df['return_open'] = df['Open'].shift(-1) / df['Open'] - 1
+```
+
+说明：使用隔日开盘价收益率，模拟"收盘前获得情绪信号，次日开盘建仓"的交易场景，避免收盘价反转偏差。
+
+**辅助收益率 — close-to-close return（用于对比）**
+```python
+df['return_close'] = df['Close'].pct_change()
+```
+
+### 2. 情绪特征构建
+
+每个特征必须附带注释说明经济含义：
+
+```python
+# sentiment_score: 情绪净值，正值表示多头情绪占优，负值表示空头情绪
+df['sentiment_score'] = df['Up votes'] - df['Down votes']
+
+# vote_imbalance: 情绪强度，绝对值越大表示投票者共识越强
+df['vote_imbalance'] = (df['Up votes'] - df['Down votes']).abs()
+
+# extreme_bull: top 20% 情绪分位数，表示极度乐观市场状态
+q80 = df['sentiment_score'].quantile(0.8)
+df['extreme_bull'] = df['sentiment_score'] >= q80
+
+# extreme_bear: bottom 20% 情绪分位数，表示极度悲观市场状态
+q20 = df['sentiment_score'].quantile(0.2)
+df['extreme_bear'] = df['sentiment_score'] <= q20
+
+# 滞后信号：用于 Signal Decay 分析（t-n 的情绪预测 t+1 收益）
+df['sentiment_lag1'] = df['sentiment_score'].shift(1)
+df['sentiment_lag2'] = df['sentiment_score'].shift(2)
+df['sentiment_lag3'] = df['sentiment_score'].shift(3)
+```
+
+### 3. 情绪分位数标记
+```python
+# 将 sentiment_score 分为 5 个等分分位数（用于 EDA 分析）
+df['sentiment_quantile'] = pd.qcut(df['sentiment_score'], q=5, labels=['Q1','Q2','Q3','Q4','Q5'])
+```
+
+### 4. 保存特征数据
+```python
+df.to_csv('hsi_features.csv', index=False)
+print("Feature data saved to hsi_features.csv")
+
+# 打印特征统计
+feature_cols = ['sentiment_score', 'vote_imbalance', 'return_open', 'return_close']
+print(df[feature_cols].describe())
+print(f"\nExtreme bull days: {df['extreme_bull'].sum()}")
+print(f"Extreme bear days: {df['extreme_bear'].sum()}")
+```
+
+## 代码规范
+- 所有特征计算使用 pandas 矢量化操作（不用 for loop）
+- 每个特征用注释说明经济含义
+- 打印关键统计数据以便 Notebook 展示
+
+## 验收标准
+- [ ] return_open 使用 shift(-1)，无未来信息泄漏
+- [ ] 7 个情绪特征全部计算完成
+- [ ] extreme_bull/bear 各约 20% 的行被标记
+- [ ] sentiment_quantile 五分组分布均匀
+- [ ] hsi_features.csv 成功保存
+
+<!-- FACTORY:DONE -->
+
+mcp startup: no servers
+codex
+我会先查看当前代码目录和 `Task 001` 的输出位置，确认现有脚本风格、`hsi_clean.csv` 的字段名以及这个任务应放在哪个文件中，然后直接实现并验证特征工程脚本。
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command 'Get-ChildItem -Force' in C:\Coding\AI-factory-projects\quantitative-research-workflow\codeexec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command 'rg --files' in C:\Coding\AI-factory-projects\quantitative-research-workflow\code succeeded in 284ms:
+__pycache__\task_001_data_loading.cpython-314.pyc
+task_001_data_loading.py
+ succeeded in 341ms:
+
+
+    目录: C:\Coding\AI-factory-projects\quantitative-research-workflow\code
+
+
+Mode                 LastWriteTime         Length Name                                                                 
+----                 -------------         ------ ----                                                                 
+d-----         2026/3/12      1:10                __pycache__                                                          
+-a----         2026/3/12      1:10           2802 task_001_data_loading.py                                             
+
+
+codex
+目录里目前只有 `task_001_data_loading.py`，我先读这个脚本并检查 `hsi_clean.csv` 是否已经存在，避免在列名和输入路径上做错误假设。
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command 'Get-Content -Path task_001_data_loading.py' in C:\Coding\AI-factory-projects\quantitative-research-workflow\codeexec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command 'Get-ChildItem -Force hsi*.csv' in C:\Coding\AI-factory-projects\quantitative-research-workflow\code succeeded in 328ms:
+
+ succeeded in 368ms:
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+
+
+DATA_FILE = "HSI.xlsx"
+OUTPUT_FILE = "hsi_clean.csv"
+VOTE_TOLERANCE = 1e-6
+SUMMARY_COLUMNS = ["Open", "High", "Low", "Close", "Up votes", "Down votes"]
+
+
+def load_data(file_path: str) -> pd.DataFrame:
+    print(f"Loading data from {file_path}...")
+    df = pd.read_excel(file_path)
+    df["Date"] = pd.to_datetime(df["Date"])
+    df = df.sort_values("Date").reset_index(drop=True)
+    print("Data loaded and sorted by Date.")
+    return df
+
+codex
+`hsi_clean.csv` 还不在工作目录里，所以我会按 `task_001` 的风格写成独立可运行脚本，并尽量把分位数分箱做得稳健一些，避免重复值导致 `qcut` 失败。
+file update
+A C:\Coding\AI-factory-projects\quantitative-research-workflow\code\task_002_feature_engineering.py
+from pathlib import Path
+
+import pandas as pd
+
+
+INPUT_FILE = "hsi_clean.csv"
+OUTPUT_FILE = "hsi_features.csv"
+FEATURE_SUMMARY_COLUMNS = [
+    "sentiment_score",
+    "vote_imbalance",
+    "return_open",
+    "return_close",
+]
+
+
+def load_data(file_path: str) -> pd.DataFrame:
+    print(f"Loading clean data from {file_path}...")
+    df = pd.read_csv(file_path)
+    if "Date" in df.columns:
+        df["Date"] = pd.to_datetime(df["Date"])
+        df = df.sort_values("Date").reset_index(drop=True)
+    print("Clean data loaded.")
+    return df
+
+
+def validate_columns(df: pd.DataFrame) -> None:
+    required_columns = {"Open", "Close", "Up votes", "Down votes"}
+    missing_columns = required_columns.difference(df.columns)
+    if missing_columns:
+        missing_str = ", ".join(sorted(missing_columns))
+        raise ValueError(f"Missing required columns: {missing_str}")
+
+
+def build_returns(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+
+    # return_open: 隔日开盘收益率，模拟收盘前获得情绪信号并在次日开盘建仓的交易场景
+    df["return_open"] = df["Open"].shift(-1) / df["Open"] - 1
+
+    # return_close: 收盘到收盘收益率，用于与主信号目标进行对比
+    df["return_close"] = df["Close"].pct_change()
+    return df
+
+
+def build_sentiment_features(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+
+    # sentiment_score: 情绪净值，正值表示多头情绪占优，负值表示空头情绪占优
+    df["sentiment_score"] = df["Up votes"] - df["Down votes"]
+
+    # vote_imbalance: 情绪强度，绝对值越大表示投票者共识越强
+    df["vote_imbalance"] = df["sentiment_score"].abs()
+
+    # extreme_bull: top 20% 情绪分位数，表示极度乐观市场状态
+    q80 = df["sentiment_score"].quantile(0.8)
+    df["extreme_bull"] = df["sentiment_score"] >= q80
+
+    # extreme_bear: bottom 20% 情绪分位数，表示极度悲观市场状态
+    q20 = df["sentiment_score"].quantile(0.2)
+    df["extreme_bear"] = df["sentiment_score"] <= q20
+
+    # sentiment_lag1: 前 1 日情绪信号，用于检验情绪影响是否延续到下一交易日
+    df["sentiment_lag1"] = df["sentiment_score"].shift(1)
+
+    # sentiment_lag2: 前 2 日情绪信号，用于分析更短期的信号衰减
+    df["sentiment_lag2"] = df["sentiment_score"].shift(2)
+
+    # sentiment_lag3: 前 3 日情绪信号，用于分析更进一步的信号衰减
+    df["sentiment_lag3"] = df["sentiment_score"].shift(3)
+
+    return df
+
+
+def build_sentiment_quantiles(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+
+    # sentiment_quantile: 将情绪净值分成五组，用于比较不同情绪区间下的收益特征
+    ranked_sentiment = df["sentiment_score"].rank(method="first")
+    df["sentiment_quantile"] = pd.qcut(
+        ranked_sentiment,
+        q=5,
+        labels=["Q1", "Q2", "Q3", "Q4", "Q5"],
+    )
+    return df
+
+
+def print_feature_diagnostics(df: pd.DataFrame) -> None:
+    print("\n=== Feature Summary Statistics ===")
+    print(df[FEATURE_SUMMARY_COLUMNS].describe())
+
+    print(f"\nExtreme bull days: {int(df['extreme_bull'].sum())}")
+    print(f"Extreme bear days: {int(df['extreme_bear'].sum())}")
+
+    print("\nSentiment quantile distribution:")
+    print(df["sentiment_quantile"].value_counts(sort=False, dropna=False))
+
+
+def save_data(df: pd.DataFrame, output_path: str) -> None:
+    df.to_csv(output_path, index=False)
+    print(f"\nFeature data saved to {output_path}")
+
+
+def main() -> None:
+    input_path = Path(INPUT_FILE)
+    if not input_path.exists():
+        raise FileNotFoundError(
+            f"Input file not found: {input_path.resolve()}. "
+            "Run task_001_data_loading.py first to generate hsi_clean.csv."
+        )
+
+    df = load_data(str(input_path))
+    validate_columns(df)
+    df = build_returns(df)
+    df = build_sentiment_features(df)
+    df = build_sentiment_quantiles(df)
+    save_data(df, OUTPUT_FILE)
+    print_feature_diagnostics(df)
+
+
+if __name__ == "__main__":
+    main()
+apply_patch(auto_approved=true) exited 0 in 92ms:
+Success. Updated the following files:
+A task_002_feature_engineering.py
+file update:
+diff --git a/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_002_feature_engineering.py b/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_002_feature_engineering.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..15c36d829f482954e847a3b0482e0a7a892da1f3
+--- /dev/null
++++ b/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_002_feature_engineering.py
+@@ -0,0 +1,121 @@
++from pathlib import Path
++
++import pandas as pd
++
++
++INPUT_FILE = "hsi_clean.csv"
++OUTPUT_FILE = "hsi_features.csv"
++FEATURE_SUMMARY_COLUMNS = [
++    "sentiment_score",
++    "vote_imbalance",
++    "return_open",
++    "return_close",
++]
++
++
++def load_data(file_path: str) -> pd.DataFrame:
++    print(f"Loading clean data from {file_path}...")
++    df = pd.read_csv(file_path)
++    if "Date" in df.columns:
++        df["Date"] = pd.to_datetime(df["Date"])
++        df = df.sort_values("Date").reset_index(drop=True)
++    print("Clean data loaded.")
++    return df
++
++
++def validate_columns(df: pd.DataFrame) -> None:
++    required_columns = {"Open", "Close", "Up votes", "Down votes"}
++    missing_columns = required_columns.difference(df.columns)
++    if missing_columns:
++        missing_str = ", ".join(sorted(missing_columns))
++        raise ValueError(f"Missing required columns: {missing_str}")
++
++
++def build_returns(df: pd.DataFrame) -> pd.DataFrame:
++    df = df.copy()
++
++    # return_open: 隔日开盘收益率，模拟收盘前获得情绪信号并在次日开盘建仓的交易场景
++    df["return_open"] = df["Open"].shift(-1) / df["Open"] - 1
++
++    # return_close: 收盘到收盘收益率，用于与主信号目标进行对比
++    df["return_close"] = df["Close"].pct_change()
++    return df
++
++
++def build_sentiment_features(df: pd.DataFrame) -> pd.DataFrame:
++    df = df.copy()
++
++    # sentiment_score: 情绪净值，正值表示多头情绪占优，负值表示空头情绪占优
++    df["sentiment_score"] = df["Up votes"] - df["Down votes"]
++
++    # vote_imbalance: 情绪强度，绝对值越大表示投票者共识越强
++    df["vote_imbalance"] = df["sentiment_score"].abs()
++
++    # extreme_bull: top 20% 情绪分位数，表示极度乐观市场状态
++    q80 = df["sentiment_score"].quantile(0.8)
++    df["extreme_bull"] = df["sentiment_score"] >= q80
++
++    # extreme_bear: bottom 20% 情绪分位数，表示极度悲观市场状态
++    q20 = df["sentiment_score"].quantile(0.2)
++    df["extreme_bear"] = df["sentiment_score"] <= q20
++
++    # sentiment_lag1: 前 1 日情绪信号，用于检验情绪影响是否延续到下一交易日
++    df["sentiment_lag1"] = df["sentiment_score"].shift(1)
++
++    # sentiment_lag2: 前 2 日情绪信号，用于分析更短期的信号衰减
++    df["sentiment_lag2"] = df["sentiment_score"].shift(2)
++
++    # sentiment_lag3: 前 3 日情绪信号，用于分析更进一步的信号衰减
++    df["sentiment_lag3"] = df["sentiment_score"].shift(3)
++
++    return df
++
++
++def build_sentiment_quantiles(df: pd.DataFrame) -> pd.DataFrame:
++    df = df.copy()
++
++    # sentiment_quantile: 将情绪净值分成五组，用于比较不同情绪区间下的收益特征
++    ranked_sentiment = df["sentiment_score"].rank(method="first")
++    df["sentiment_quantile"] = pd.qcut(
++        ranked_sentiment,
++        q=5,
++        labels=["Q1", "Q2", "Q3", "Q4", "Q5"],
++    )
++    return df
++
++
++def print_feature_diagnostics(df: pd.DataFrame) -> None:
++    print("\n=== Feature Summary Statistics ===")
++    print(df[FEATURE_SUMMARY_COLUMNS].describe())
++
++    print(f"\nExtreme bull days: {int(df['extreme_bull'].sum())}")
++    print(f"Extreme bear days: {int(df['extreme_bear'].sum())}")
++
++    print("\nSentiment quantile distribution:")
++    print(df["sentiment_quantile"].value_counts(sort=False, dropna=False))
++
++
++def save_data(df: pd.DataFrame, output_path: str) -> None:
++    df.to_csv(output_path, index=False)
++    print(f"\nFeature data saved to {output_path}")
++
++
++def main() -> None:
++    input_path = Path(INPUT_FILE)
++    if not input_path.exists():
++        raise FileNotFoundError(
++            f"Input file not found: {input_path.resolve()}. "
++            "Run task_001_data_loading.py first to generate hsi_clean.csv."
++        )
++
++    df = load_data(str(input_path))
++    validate_columns(df)
++    df = build_returns(df)
++    df = build_sentiment_features(df)
++    df = build_sentiment_quantiles(df)
++    save_data(df, OUTPUT_FILE)
++    print_feature_diagnostics(df)
++
++
++if __name__ == "__main__":
++    main()
+
+file update:
+diff --git a/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_002_feature_engineering.py b/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_002_feature_engineering.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..15c36d829f482954e847a3b0482e0a7a892da1f3
+--- /dev/null
++++ b/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_002_feature_engineering.py
+@@ -0,0 +1,121 @@
++from pathlib import Path
++
++import pandas as pd
++
++
++INPUT_FILE = "hsi_clean.csv"
++OUTPUT_FILE = "hsi_features.csv"
++FEATURE_SUMMARY_COLUMNS = [
++    "sentiment_score",
++    "vote_imbalance",
++    "return_open",
++    "return_close",
++]
++
++
++def load_data(file_path: str) -> pd.DataFrame:
++    print(f"Loading clean data from {file_path}...")
++    df = pd.read_csv(file_path)
++    if "Date" in df.columns:
++        df["Date"] = pd.to_datetime(df["Date"])
++        df = df.sort_values("Date").reset_index(drop=True)
++    print("Clean data loaded.")
++    return df
++
++
++def validate_columns(df: pd.DataFrame) -> None:
++    required_columns = {"Open", "Close", "Up votes", "Down votes"}
++    missing_columns = required_columns.difference(df.columns)
++    if missing_columns:
++        missing_str = ", ".join(sorted(missing_columns))
++        raise ValueError(f"Missing required columns: {missing_str}")
++
++
++def build_returns(df: pd.DataFrame) -> pd.DataFrame:
++    df = df.copy()
++
++    # return_open: 隔日开盘收益率，模拟收盘前获得情绪信号并在次日开盘建仓的交易场景
++    df["return_open"] = df["Open"].shift(-1) / df["Open"] - 1
++
++    # return_close: 收盘到收盘收益率，用于与主信号目标进行对比
++    df["return_close"] = df["Close"].pct_change()
++    return df
++
++
++def build_sentiment_features(df: pd.DataFrame) -> pd.DataFrame:
++    df = df.copy()
++
++    # sentiment_score: 情绪净值，正值表示多头情绪占优，负值表示空头情绪占优
++    df["sentiment_score"] = df["Up votes"] - df["Down votes"]
++
++    # vote_imbalance: 情绪强度，绝对值越大表示投票者共识越强
++    df["vote_imbalance"] = df["sentiment_score"].abs()
++
++    # extreme_bull: top 20% 情绪分位数，表示极度乐观市场状态
++    q80 = df["sentiment_score"].quantile(0.8)
++    df["extreme_bull"] = df["sentiment_score"] >= q80
++
++    # extreme_bear: bottom 20% 情绪分位数，表示极度悲观市场状态
++    q20 = df["sentiment_score"].quantile(0.2)
++    df["extreme_bear"] = df["sentiment_score"] <= q20
++
++    # sentiment_lag1: 前 1 日情绪信号，用于检验情绪影响是否延续到下一交易日
++    df["sentiment_lag1"] = df["sentiment_score"].shift(1)
++
++    # sentiment_lag2: 前 2 日情绪信号，用于分析更短期的信号衰减
++    df["sentiment_lag2"] = df["sentiment_score"].shift(2)
++
++    # sentiment_lag3: 前 3 日情绪信号，用于分析更进一步的信号衰减
++    df["sentiment_lag3"] = df["sentiment_score"].shift(3)
++
++    return df
++
++
++def build_sentiment_quantiles(df: pd.DataFrame) -> pd.DataFrame:
++    df = df.copy()
++
++    # sentiment_quantile: 将情绪净值分成五组，用于比较不同情绪区间下的收益特征
++    ranked_sentiment = df["sentiment_score"].rank(method="first")
++    df["sentiment_quantile"] = pd.qcut(
++        ranked_sentiment,
++        q=5,
++        labels=["Q1", "Q2", "Q3", "Q4", "Q5"],
++    )
++    return df
++
++
++def print_feature_diagnostics(df: pd.DataFrame) -> None:
++    print("\n=== Feature Summary Statistics ===")
++    print(df[FEATURE_SUMMARY_COLUMNS].describe())
++
++    print(f"\nExtreme bull days: {int(df['extreme_bull'].sum())}")
++    print(f"Extreme bear days: {int(df['extreme_bear'].sum())}")
++
++    print("\nSentiment quantile distribution:")
++    print(df["sentiment_quantile"].value_counts(sort=False, dropna=False))
++
++
++def save_data(df: pd.DataFrame, output_path: str) -> None:
++    df.to_csv(output_path, index=False)
++    print(f"\nFeature data saved to {output_path}")
++
++
++def main() -> None:
++    input_path = Path(INPUT_FILE)
++    if not input_path.exists():
++        raise FileNotFoundError(
++            f"Input file not found: {input_path.resolve()}. "
++            "Run task_001_data_loading.py first to generate hsi_clean.csv."
++        )
++
++    df = load_data(str(input_path))
++    validate_columns(df)
++    df = build_returns(df)
++    df = build_sentiment_features(df)
++    df = build_sentiment_quantiles(df)
++    save_data(df, OUTPUT_FILE)
++    print_feature_diagnostics(df)
++
++
++if __name__ == "__main__":
++    main()
+
+codex
+脚本已经写好。接下来我做两步验证：先做静态语法检查，再确认它在缺少输入文件时的报错是明确的，避免交付一个无法定位问题的脚本。
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command 'python -m py_compile task_002_feature_engineering.py' in C:\Coding\AI-factory-projects\quantitative-research-workflow\codeexec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command 'python task_002_feature_engineering.py' in C:\Coding\AI-factory-projects\quantitative-research-workflow\code succeeded in 350ms:
+
+ exited 1 in 720ms:
+Traceback (most recent call last):
+  File "C:\Coding\AI-factory-projects\quantitative-research-workflow\code\task_002_feature_engineering.py", line 121, in <module>
+    main()
+    ~~~~^^
+  File "C:\Coding\AI-factory-projects\quantitative-research-workflow\code\task_002_feature_engineering.py", line 106, in main
+    raise FileNotFoundError(
+    ...<2 lines>...
+    )
+FileNotFoundError: Input file not found: C:\Coding\AI-factory-projects\quantitative-research-workflow\code\hsi_clean.csv. Run task_001_data_loading.py first to generate hsi_clean.csv.
+file update:
+diff --git a/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_002_feature_engineering.py b/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_002_feature_engineering.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..15c36d829f482954e847a3b0482e0a7a892da1f3
+--- /dev/null
++++ b/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_002_feature_engineering.py
+@@ -0,0 +1,121 @@
++from pathlib import Path
++
++import pandas as pd
++
++
++INPUT_FILE = "hsi_clean.csv"
++OUTPUT_FILE = "hsi_features.csv"
++FEATURE_SUMMARY_COLUMNS = [
++    "sentiment_score",
++    "vote_imbalance",
++    "return_open",
++    "return_close",
++]
++
++
++def load_data(file_path: str) -> pd.DataFrame:
++    print(f"Loading clean data from {file_path}...")
++    df = pd.read_csv(file_path)
++    if "Date" in df.columns:
++        df["Date"] = pd.to_datetime(df["Date"])
++        df = df.sort_values("Date").reset_index(drop=True)
++    print("Clean data loaded.")
++    return df
++
++
++def validate_columns(df: pd.DataFrame) -> None:
++    required_columns = {"Open", "Close", "Up votes", "Down votes"}
++    missing_columns = required_columns.difference(df.columns)
++    if missing_columns:
++        missing_str = ", ".join(sorted(missing_columns))
++        raise ValueError(f"Missing required columns: {missing_str}")
++
++
++def build_returns(df: pd.DataFrame) -> pd.DataFrame:
++    df = df.copy()
++
++    # return_open: 隔日开盘收益率，模拟收盘前获得情绪信号并在次日开盘建仓的交易场景
++    df["return_open"] = df["Open"].shift(-1) / df["Open"] - 1
++
++    # return_close: 收盘到收盘收益率，用于与主信号目标进行对比
++    df["return_close"] = df["Close"].pct_change()
++    return df
++
++
++def build_sentiment_features(df: pd.DataFrame) -> pd.DataFrame:
++    df = df.copy()
++
++    # sentiment_score: 情绪净值，正值表示多头情绪占优，负值表示空头情绪占优
++    df["sentiment_score"] = df["Up votes"] - df["Down votes"]
++
++    # vote_imbalance: 情绪强度，绝对值越大表示投票者共识越强
++    df["vote_imbalance"] = df["sentiment_score"].abs()
++
++    # extreme_bull: top 20% 情绪分位数，表示极度乐观市场状态
++    q80 = df["sentiment_score"].quantile(0.8)
++    df["extreme_bull"] = df["sentiment_score"] >= q80
++
++    # extreme_bear: bottom 20% 情绪分位数，表示极度悲观市场状态
++    q20 = df["sentiment_score"].quantile(0.2)
++    df["extreme_bear"] = df["sentiment_score"] <= q20
++
++    # sentiment_lag1: 前 1 日情绪信号，用于检验情绪影响是否延续到下一交易日
++    df["sentiment_lag1"] = df["sentiment_score"].shift(1)
++
++    # sentiment_lag2: 前 2 日情绪信号，用于分析更短期的信号衰减
++    df["sentiment_lag2"] = df["sentiment_score"].shift(2)
++
++    # sentiment_lag3: 前 3 日情绪信号，用于分析更进一步的信号衰减
++    df["sentiment_lag3"] = df["sentiment_score"].shift(3)
++
++    return df
++
++
++def build_sentiment_quantiles(df: pd.DataFrame) -> pd.DataFrame:
++    df = df.copy()
++
++    # sentiment_quantile: 将情绪净值分成五组，用于比较不同情绪区间下的收益特征
++    ranked_sentiment = df["sentiment_score"].rank(method="first")
++    df["sentiment_quantile"] = pd.qcut(
++        ranked_sentiment,
++        q=5,
++        labels=["Q1", "Q2", "Q3", "Q4", "Q5"],
++    )
++    return df
++
++
++def print_feature_diagnostics(df: pd.DataFrame) -> None:
++    print("\n=== Feature Summary Statistics ===")
++    print(df[FEATURE_SUMMARY_COLUMNS].describe())
++
++    print(f"\nExtreme bull days: {int(df['extreme_bull'].sum())}")
++    print(f"Extreme bear days: {int(df['extreme_bear'].sum())}")
++
++    print("\nSentiment quantile distribution:")
++    print(df["sentiment_quantile"].value_counts(sort=False, dropna=False))
++
++
++def save_data(df: pd.DataFrame, output_path: str) -> None:
++    df.to_csv(output_path, index=False)
++    print(f"\nFeature data saved to {output_path}")
++
++
++def main() -> None:
++    input_path = Path(INPUT_FILE)
++    if not input_path.exists():
++        raise FileNotFoundError(
++            f"Input file not found: {input_path.resolve()}. "
++            "Run task_001_data_loading.py first to generate hsi_clean.csv."
++        )
++
++    df = load_data(str(input_path))
++    validate_columns(df)
++    df = build_returns(df)
++    df = build_sentiment_features(df)
++    df = build_sentiment_quantiles(df)
++    save_data(df, OUTPUT_FILE)
++    print_feature_diagnostics(df)
++
++
++if __name__ == "__main__":
++    main()
+
+codex
+已新增 [task_002_feature_engineering.py](C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_002_feature_engineering.py)，实现了收益率构建、7 个情绪特征、五分位分箱、CSV 输出和统计打印，全部使用 `pandas` 矢量化操作。`return_open` 按要求使用 `shift(-1)`，没有把未来信息用于特征本身，只是构造对齐后的预测目标。
+
+我做了语法校验，脚本可编译通过。当前工作目录里还没有 `hsi_clean.csv`，所以无法完成基于真实数据的分布验证；实际运行时会明确报错提示先执行 `task_001_data_loading.py`。等 `hsi_clean.csv` 生成后，运行 `python task_002_feature_engineering.py` 即可输出 `hsi_features.csv` 并打印极端情绪天数与五分位分布。
+file update:
+diff --git a/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_002_feature_engineering.py b/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_002_feature_engineering.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..15c36d829f482954e847a3b0482e0a7a892da1f3
+--- /dev/null
++++ b/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_002_feature_engineering.py
+@@ -0,0 +1,121 @@
++from pathlib import Path
++
++import pandas as pd
++
++
++INPUT_FILE = "hsi_clean.csv"
++OUTPUT_FILE = "hsi_features.csv"
++FEATURE_SUMMARY_COLUMNS = [
++    "sentiment_score",
++    "vote_imbalance",
++    "return_open",
++    "return_close",
++]
++
++
++def load_data(file_path: str) -> pd.DataFrame:
++    print(f"Loading clean data from {file_path}...")
++    df = pd.read_csv(file_path)
++    if "Date" in df.columns:
++        df["Date"] = pd.to_datetime(df["Date"])
++        df = df.sort_values("Date").reset_index(drop=True)
++    print("Clean data loaded.")
++    return df
++
++
++def validate_columns(df: pd.DataFrame) -> None:
++    required_columns = {"Open", "Close", "Up votes", "Down votes"}
++    missing_columns = required_columns.difference(df.columns)
++    if missing_columns:
++        missing_str = ", ".join(sorted(missing_columns))
++        raise ValueError(f"Missing required columns: {missing_str}")
++
++
++def build_returns(df: pd.DataFrame) -> pd.DataFrame:
++    df = df.copy()
++
++    # return_open: 隔日开盘收益率，模拟收盘前获得情绪信号并在次日开盘建仓的交易场景
++    df["return_open"] = df["Open"].shift(-1) / df["Open"] - 1
++
++    # return_close: 收盘到收盘收益率，用于与主信号目标进行对比
++    df["return_close"] = df["Close"].pct_change()
++    return df
++
++
++def build_sentiment_features(df: pd.DataFrame) -> pd.DataFrame:
++    df = df.copy()
++
++    # sentiment_score: 情绪净值，正值表示多头情绪占优，负值表示空头情绪占优
++    df["sentiment_score"] = df["Up votes"] - df["Down votes"]
++
++    # vote_imbalance: 情绪强度，绝对值越大表示投票者共识越强
++    df["vote_imbalance"] = df["sentiment_score"].abs()
++
++    # extreme_bull: top 20% 情绪分位数，表示极度乐观市场状态
++    q80 = df["sentiment_score"].quantile(0.8)
++    df["extreme_bull"] = df["sentiment_score"] >= q80
++
++    # extreme_bear: bottom 20% 情绪分位数，表示极度悲观市场状态
++    q20 = df["sentiment_score"].quantile(0.2)
++    df["extreme_bear"] = df["sentiment_score"] <= q20
++
++    # sentiment_lag1: 前 1 日情绪信号，用于检验情绪影响是否延续到下一交易日
++    df["sentiment_lag1"] = df["sentiment_score"].shift(1)
++
++    # sentiment_lag2: 前 2 日情绪信号，用于分析更短期的信号衰减
++    df["sentiment_lag2"] = df["sentiment_score"].shift(2)
++
++    # sentiment_lag3: 前 3 日情绪信号，用于分析更进一步的信号衰减
++    df["sentiment_lag3"] = df["sentiment_score"].shift(3)
++
++    return df
++
++
++def build_sentiment_quantiles(df: pd.DataFrame) -> pd.DataFrame:
++    df = df.copy()
++
++    # sentiment_quantile: 将情绪净值分成五组，用于比较不同情绪区间下的收益特征
++    ranked_sentiment = df["sentiment_score"].rank(method="first")
++    df["sentiment_quantile"] = pd.qcut(
++        ranked_sentiment,
++        q=5,
++        labels=["Q1", "Q2", "Q3", "Q4", "Q5"],
++    )
++    return df
++
++
++def print_feature_diagnostics(df: pd.DataFrame) -> None:
++    print("\n=== Feature Summary Statistics ===")
++    print(df[FEATURE_SUMMARY_COLUMNS].describe())
++
++    print(f"\nExtreme bull days: {int(df['extreme_bull'].sum())}")
++    print(f"Extreme bear days: {int(df['extreme_bear'].sum())}")
++
++    print("\nSentiment quantile distribution:")
++    print(df["sentiment_quantile"].value_counts(sort=False, dropna=False))
++
++
++def save_data(df: pd.DataFrame, output_path: str) -> None:
++    df.to_csv(output_path, index=False)
++    print(f"\nFeature data saved to {output_path}")
++
++
++def main() -> None:
++    input_path = Path(INPUT_FILE)
++    if not input_path.exists():
++        raise FileNotFoundError(
++            f"Input file not found: {input_path.resolve()}. "
++            "Run task_001_data_loading.py first to generate hsi_clean.csv."
++        )
++
++    df = load_data(str(input_path))
++    validate_columns(df)
++    df = build_returns(df)
++    df = build_sentiment_features(df)
++    df = build_sentiment_quantiles(df)
++    save_data(df, OUTPUT_FILE)
++    print_feature_diagnostics(df)
++
++
++if __name__ == "__main__":
++    main()
+
+tokens used
+5,608
+已新增 [task_002_feature_engineering.py](C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_002_feature_engineering.py)，实现了收益率构建、7 个情绪特征、五分位分箱、CSV 输出和统计打印，全部使用 `pandas` 矢量化操作。`return_open` 按要求使用 `shift(-1)`，没有把未来信息用于特征本身，只是构造对齐后的预测目标。
+
+我做了语法校验，脚本可编译通过。当前工作目录里还没有 `hsi_clean.csv`，所以无法完成基于真实数据的分布验证；实际运行时会明确报错提示先执行 `task_001_data_loading.py`。等 `hsi_clean.csv` 生成后，运行 `python task_002_feature_engineering.py` 即可输出 `hsi_features.csv` 并打印极端情绪天数与五分位分布。

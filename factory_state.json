@@ -1,0 +1,76 @@
+{
+  "project": "quantitative-research-workflow",
+  "schema_version": 1,
+  "factory_status": "done",
+  "phases": {
+    "architecture": "done",
+    "tasks_generated": "done",
+    "handoff": "done"
+  },
+  "tasks": {
+    "task_001": {
+      "codex": "done",
+      "report": "done",
+      "review": "pass",
+      "codex_exit": 0,
+      "updated_at": "2026-03-12T01:35:00"
+    },
+    "task_002": {
+      "codex": "done",
+      "report": "done",
+      "review": "pass",
+      "codex_exit": 0,
+      "updated_at": "2026-03-12T01:35:00"
+    },
+    "task_003": {
+      "codex": "done",
+      "report": "done",
+      "review": "pass",
+      "codex_exit": 0,
+      "updated_at": "2026-03-12T01:35:00"
+    },
+    "task_004": {
+      "codex": "done",
+      "report": "done",
+      "review": "pass",
+      "codex_exit": 0,
+      "updated_at": "2026-03-12T01:35:00"
+    },
+    "task_005": {
+      "codex": "done",
+      "report": "done",
+      "review": "pass_with_warnings",
+      "codex_exit": 0,
+      "updated_at": "2026-03-12T01:35:00"
+    },
+    "task_006": {
+      "codex": "done",
+      "report": "done",
+      "review": "pass",
+      "codex_exit": 0,
+      "updated_at": "2026-03-12T01:35:00"
+    },
+    "task_007": {
+      "codex": "done",
+      "report": "done",
+      "review": "pass",
+      "codex_exit": 0,
+      "updated_at": "2026-03-12T01:35:00"
+    },
+    "task_008": {
+      "codex": "done",
+      "report": "done",
+      "review": "pass_with_warnings",
+      "codex_exit": 0,
+      "updated_at": "2026-03-12T01:35:00"
+    },
+    "task_009": {
+      "codex": "done",
+      "report": "done",
+      "review": "pass_with_warnings",
+      "codex_exit": 0,
+      "updated_at": "2026-03-12T01:35:00"
+    }
+  },
+  "updated_at": "2026-03-12T01:36:00"
+}

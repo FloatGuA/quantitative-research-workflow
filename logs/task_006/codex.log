@@ -1,0 +1,1672 @@
+# Codex Log: Task 006 - Strategy Design
+
+## Prompt
+
+# Task 006 — 策略设计
+
+## 目标
+定义三种量化交易策略，每种含经济直觉说明和信号生成逻辑，为 Task 7 回测引擎提供输入。
+
+## 工作目录
+`code/`
+
+## 依赖
+- `hsi_features.csv`（Task 002 输出）
+
+## 输出文件
+- `task_006_strategy_design.py` — 策略定义模块
+
+## 详细要求
+
+### Strategy A — Long-Short Portfolio（主策略）
+**经济直觉**：行业标准信号检验方法。做多情绪最好的前 20% 交易日，做空情绪最差的后 20%，检验情绪分布两端的收益差异是否显著。
+
+```python
+def strategy_a_signals(df):
+    """
+    Long-Short Portfolio Strategy
+    Long: sentiment_score in top 20% (extreme_bull)
+    Short: sentiment_score in bottom 20% (extreme_bear)
+    Hold: otherwise
+    Returns: Series with values 1 (long), -1 (short), 0 (hold)
+    """
+    signals = pd.Series(0, index=df.index)
+    signals[df['extreme_bull']] = 1
+    signals[df['extreme_bear']] = -1
+
+    print("Strategy A Signal Distribution:")
+    print(f"  Long  (1): {(signals==1).sum()} days ({(signals==1).mean():.1%})")
+    print(f"  Short (-1): {(signals==-1).sum()} days ({(signals==-1).mean():.1%})")
+    print(f"  Hold  (0): {(signals==0).sum()} days ({(signals==0).mean():.1%})")
+    return signals
+```
+
+### Strategy B — Threshold Strategy
+**经济直觉**：基于情绪净值阈值的趋势跟随策略。当情绪明显偏多（>0.1）时做多，明显偏空（<-0.1）时做空，情绪中性时空仓。阈值 ±0.1 可在稳健性检验中敏感性分析。
+
+```python
+def strategy_b_signals(df, threshold=0.1):
+    """
+    Threshold Strategy
+    Long:  sentiment_score > threshold
+    Short: sentiment_score < -threshold
+    Hold:  otherwise (neutral zone)
+    """
+    signals = pd.Series(0, index=df.index)
+    signals[df['sentiment_score'] > threshold] = 1
+    signals[df['sentiment_score'] < -threshold] = -1
+
+    print(f"Strategy B Signal Distribution (threshold={threshold}):")
+    print(f"  Long  (1): {(signals==1).sum()} days ({(signals==1).mean():.1%})")
+    print(f"  Short (-1): {(signals==-1).sum()} days ({(signals==-1).mean():.1%})")
+    print(f"  Hold  (0): {(signals==0).sum()} days ({(signals==0).mean():.1%})")
+    return signals
+```
+
+### Strategy C — Volume Filter Strategy
+**经济直觉**：在 Strategy B 基础上加入信号质量过滤。只在 vote_imbalance（情绪强度）高于中位数时执行信号，低强度时空仓。高共识度的情绪信号噪声更低，预期能提升 Sharpe Ratio。
+
+```python
+def strategy_c_signals(df, threshold=0.1):
+    """
+    Volume Filter Strategy
+    Execute Strategy B signals only when vote_imbalance > median
+    Otherwise: hold (0)
+    """
+    median_imbalance = df['vote_imbalance'].median()
+    high_conviction = df['vote_imbalance'] >= median_imbalance
+
+    # Base signals from Strategy B
+    base_signals = strategy_b_signals(df, threshold)
+
+    # Apply volume filter
+    signals = base_signals.where(high_conviction, other=0)
+
+    print(f"\nStrategy C Signal Distribution (vote filter: imbalance>={median_imbalance:.4f}):")
+    print(f"  Long  (1): {(signals==1).sum()} days ({(signals==1).mean():.1%})")
+    print(f"  Short (-1): {(signals==-1).sum()} days ({(signals==-1).mean():.1%})")
+    print(f"  Hold  (0): {(signals==0).sum()} days ({(signals==0).mean():.1%})")
+    return signals
+```
+
+### 策略汇总输出
+```python
+def generate_all_signals(df):
+    """生成所有策略信号并返回 DataFrame"""
+    print("=" * 50)
+    print("STRATEGY SIGNAL GENERATION")
+    print("=" * 50)
+
+    df = df.copy()
+    df['signal_a'] = strategy_a_signals(df)
+    print()
+    df['signal_b'] = strategy_b_signals(df)
+    print()
+    df['signal_c'] = strategy_c_signals(df)
+
+    # 信号相关性
+    print("\nStrategy Signal Correlation:")
+    print(df[['signal_a', 'signal_b', 'signal_c']].corr())
+
+    return df
+```
+
+## 代码规范
+- 每个策略函数包含完整的经济直觉 docstring
+- 信号必须基于已知信息（当期情绪预测次期收益，用 shift(1) 在回测中对齐）
+- 阈值参数化，方便稳健性测试修改
+
+## 验收标准
+- [ ] 三个策略函数均已实现，签名清晰
+- [ ] Strategy A 约 20% long + 20% short + 60% hold
+- [ ] Strategy C 比 Strategy B 的有效信号数约减少 50%
+- [ ] 每个策略有经济直觉说明
+
+<!-- FACTORY:DONE -->
+
+
+## Output
+
+OpenAI Codex v0.111.0 (research preview)
+--------
+workdir: C:\Coding\AI-factory-projects\quantitative-research-workflow\code
+model: gpt-5.4
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, C:\Users\86579\.codex\memories]
+reasoning effort: none
+reasoning summaries: none
+session id: 019cdde6-2c9b-7193-9888-e92f1a812360
+--------
+user
+# Task 006 — 策略设计
+
+## 目标
+定义三种量化交易策略，每种含经济直觉说明和信号生成逻辑，为 Task 7 回测引擎提供输入。
+
+## 工作目录
+`code/`
+
+## 依赖
+- `hsi_features.csv`（Task 002 输出）
+
+## 输出文件
+- `task_006_strategy_design.py` — 策略定义模块
+
+## 详细要求
+
+### Strategy A — Long-Short Portfolio（主策略）
+**经济直觉**：行业标准信号检验方法。做多情绪最好的前 20% 交易日，做空情绪最差的后 20%，检验情绪分布两端的收益差异是否显著。
+
+```python
+def strategy_a_signals(df):
+    """
+    Long-Short Portfolio Strategy
+    Long: sentiment_score in top 20% (extreme_bull)
+    Short: sentiment_score in bottom 20% (extreme_bear)
+    Hold: otherwise
+    Returns: Series with values 1 (long), -1 (short), 0 (hold)
+    """
+    signals = pd.Series(0, index=df.index)
+    signals[df['extreme_bull']] = 1
+    signals[df['extreme_bear']] = -1
+
+    print("Strategy A Signal Distribution:")
+    print(f"  Long  (1): {(signals==1).sum()} days ({(signals==1).mean():.1%})")
+    print(f"  Short (-1): {(signals==-1).sum()} days ({(signals==-1).mean():.1%})")
+    print(f"  Hold  (0): {(signals==0).sum()} days ({(signals==0).mean():.1%})")
+    return signals
+```
+
+### Strategy B — Threshold Strategy
+**经济直觉**：基于情绪净值阈值的趋势跟随策略。当情绪明显偏多（>0.1）时做多，明显偏空（<-0.1）时做空，情绪中性时空仓。阈值 ±0.1 可在稳健性检验中敏感性分析。
+
+```python
+def strategy_b_signals(df, threshold=0.1):
+    """
+    Threshold Strategy
+    Long:  sentiment_score > threshold
+    Short: sentiment_score < -threshold
+    Hold:  otherwise (neutral zone)
+    """
+    signals = pd.Series(0, index=df.index)
+    signals[df['sentiment_score'] > threshold] = 1
+    signals[df['sentiment_score'] < -threshold] = -1
+
+    print(f"Strategy B Signal Distribution (threshold={threshold}):")
+    print(f"  Long  (1): {(signals==1).sum()} days ({(signals==1).mean():.1%})")
+    print(f"  Short (-1): {(signals==-1).sum()} days ({(signals==-1).mean():.1%})")
+    print(f"  Hold  (0): {(signals==0).sum()} days ({(signals==0).mean():.1%})")
+    return signals
+```
+
+### Strategy C — Volume Filter Strategy
+**经济直觉**：在 Strategy B 基础上加入信号质量过滤。只在 vote_imbalance（情绪强度）高于中位数时执行信号，低强度时空仓。高共识度的情绪信号噪声更低，预期能提升 Sharpe Ratio。
+
+```python
+def strategy_c_signals(df, threshold=0.1):
+    """
+    Volume Filter Strategy
+    Execute Strategy B signals only when vote_imbalance > median
+    Otherwise: hold (0)
+    """
+    median_imbalance = df['vote_imbalance'].median()
+    high_conviction = df['vote_imbalance'] >= median_imbalance
+
+    # Base signals from Strategy B
+    base_signals = strategy_b_signals(df, threshold)
+
+    # Apply volume filter
+    signals = base_signals.where(high_conviction, other=0)
+
+    print(f"\nStrategy C Signal Distribution (vote filter: imbalance>={median_imbalance:.4f}):")
+    print(f"  Long  (1): {(signals==1).sum()} days ({(signals==1).mean():.1%})")
+    print(f"  Short (-1): {(signals==-1).sum()} days ({(signals==-1).mean():.1%})")
+    print(f"  Hold  (0): {(signals==0).sum()} days ({(signals==0).mean():.1%})")
+    return signals
+```
+
+### 策略汇总输出
+```python
+def generate_all_signals(df):
+    """生成所有策略信号并返回 DataFrame"""
+    print("=" * 50)
+    print("STRATEGY SIGNAL GENERATION")
+    print("=" * 50)
+
+    df = df.copy()
+    df['signal_a'] = strategy_a_signals(df)
+    print()
+    df['signal_b'] = strategy_b_signals(df)
+    print()
+    df['signal_c'] = strategy_c_signals(df)
+
+    # 信号相关性
+    print("\nStrategy Signal Correlation:")
+    print(df[['signal_a', 'signal_b', 'signal_c']].corr())
+
+    return df
+```
+
+## 代码规范
+- 每个策略函数包含完整的经济直觉 docstring
+- 信号必须基于已知信息（当期情绪预测次期收益，用 shift(1) 在回测中对齐）
+- 阈值参数化，方便稳健性测试修改
+
+## 验收标准
+- [ ] 三个策略函数均已实现，签名清晰
+- [ ] Strategy A 约 20% long + 20% short + 60% hold
+- [ ] Strategy C 比 Strategy B 的有效信号数约减少 50%
+- [ ] 每个策略有经济直觉说明
+
+<!-- FACTORY:DONE -->
+
+mcp startup: no servers
+codex
+我会先检查仓库里现有的数据文件和相关任务产物，确认 `hsi_features.csv` 的字段以及项目里已有的代码风格，然后直接实现 `task_006_strategy_design.py`。
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command 'Get-ChildItem -Recurse -Filter hsi_features.csv | Select-Object -ExpandProperty FullName' in C:\Coding\AI-factory-projects\quantitative-research-workflow\codeexec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command 'rg --files' in C:\Coding\AI-factory-projects\quantitative-research-workflow\codeexec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command 'Get-ChildItem -Force' in C:\Coding\AI-factory-projects\quantitative-research-workflow\code succeeded in 346ms:
+__pycache__\task_005_insights.cpython-314.pyc
+__pycache__\task_004_signal_analysis.cpython-314.pyc
+__pycache__\task_003_eda.cpython-314.pyc
+__pycache__\task_002_feature_engineering.cpython-314.pyc
+__pycache__\task_001_data_loading.cpython-314.pyc
+task_005_insights.py
+task_004_signal_analysis.py
+task_003_eda.py
+task_002_feature_engineering.py
+task_001_data_loading.py
+ succeeded in 405ms:
+
+ succeeded in 423ms:
+
+
+    目录: C:\Coding\AI-factory-projects\quantitative-research-workflow\code
+
+
+Mode                 LastWriteTime         Length Name                                                                 
+----                 -------------         ------ ----                                                                 
+d-----         2026/3/12      1:15                __pycache__                                                          
+-a----         2026/3/12      1:10           2802 task_001_data_loading.py                                             
+-a----         2026/3/12      1:11           3991 task_002_feature_engineering.py                                      
+-a----         2026/3/12      1:12           6707 task_003_eda.py                                                      
+-a----         2026/3/12      1:14           6835 task_004_signal_analysis.py                                          
+-a----         2026/3/12      1:15           9255 task_005_insights.py                                                 
+
+
+codex
+我已经确认工作区只有前五个任务脚本，`hsi_features.csv` 不在 `code/` 根目录里。接下来读取 `task_002_feature_engineering.py` 和后续分析脚本，按现有字段约定实现策略模块，并兼容外部传入的数据路径。
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command 'Get-Content task_002_feature_engineering.py' in C:\Coding\AI-factory-projects\quantitative-research-workflow\codeexec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command 'Get-Content task_004_signal_analysis.py' in C:\Coding\AI-factory-projects\quantitative-research-workflow\codeexec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command 'Get-Content task_005_insights.py' in C:\Coding\AI-factory-projects\quantitative-research-workflow\code succeeded in 340ms:
+from pathlib import Path
+
+import pandas as pd
+
+
+INPUT_FILE = "hsi_clean.csv"
+OUTPUT_FILE = "hsi_features.csv"
+FEATURE_SUMMARY_COLUMNS = [
+    "sentiment_score",
+    "vote_imbalance",
+    "return_open",
+    "return_close",
+]
+
+
+def load_data(file_path: str) -> pd.DataFrame:
+    print(f"Loading clean data from {file_path}...")
+    df = pd.read_csv(file_path)
+    if "Date" in df.columns:
+        df["Date"] = pd.to_datetime(df["Date"])
+ succeeded in 340ms:
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import seaborn as sns
+from scipy import stats
+from scipy.stats import ttest_1samp
+
+
+INPUT_FILE = "hsi_features.csv"
+MONTHLY_IC_FIG = "fig_08_monthly_ic.png"
+SIGNAL_DECAY_FIG = "fig_09_signal_decay.png"
+MONTHLY_IC_OUTPUT = "monthly_ic.csv"
+SIGNAL_DECAY_OUTPUT = "signal_decay.csv"
+MIN_MONTHLY_OBSERVATIONS = 5
+DECAY_HORIZONS = [1, 2, 3]
+FONT_SIZE = 12
+
+
+ succeeded in 329ms:
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+from scipy import stats
+
+from task_004_signal_analysis import (
+    INPUT_FILE,
+    compute_monthly_ic,
+    compute_signal_decay,
+    load_data,
+    run_ic_ttest,
+    validate_columns,
+)
+
+
+HIGH_IMBALANCE_QUANTILE = 0.7
+LOW_IMBALANCE_QUANTILE = 0.3
+
+
+codex
+我已经拿到字段定义了，准备新建 `task_006_strategy_design.py`。实现会保持和前面任务一致的脚本风格，包含数据加载、字段校验、三个策略函数、汇总函数，以及一个 `main()` 方便直接验证信号分布。
+file update
+A C:\Coding\AI-factory-projects\quantitative-research-workflow\code\task_006_strategy_design.py
+from pathlib import Path
+
+import pandas as pd
+
+
+INPUT_FILE = "hsi_features.csv"
+SIGNAL_COLUMNS = ["signal_a", "signal_b", "signal_c"]
+
+
+def load_data(file_path: str) -> pd.DataFrame:
+    """Load feature data generated in Task 002."""
+    print(f"Loading feature data from {file_path}...")
+    df = pd.read_csv(file_path)
+    if "Date" in df.columns:
+        df["Date"] = pd.to_datetime(df["Date"])
+        df = df.sort_values("Date").reset_index(drop=True)
+    print("Feature data loaded.")
+    return df
+
+
+def validate_columns(df: pd.DataFrame) -> None:
+    """Validate that all strategy inputs are available."""
+    required_columns = {
+        "sentiment_score",
+        "vote_imbalance",
+        "extreme_bull",
+        "extreme_bear",
+    }
+    missing_columns = required_columns.difference(df.columns)
+    if missing_columns:
+        missing_str = ", ".join(sorted(missing_columns))
+        raise ValueError(f"Missing required columns: {missing_str}")
+
+
+def _print_signal_distribution(name: str, signals: pd.Series, extra_label: str = "") -> None:
+    """Print a compact distribution summary for a strategy signal series."""
+    header = f"{name} Signal Distribution"
+    if extra_label:
+        header = f"{header} ({extra_label})"
+
+    print(header + ":")
+    print(f"  Long  (1): {(signals == 1).sum()} days ({(signals == 1).mean():.1%})")
+    print(f"  Short (-1): {(signals == -1).sum()} days ({(signals == -1).mean():.1%})")
+    print(f"  Hold  (0): {(signals == 0).sum()} days ({(signals == 0).mean():.1%})")
+
+
+def strategy_a_signals(df: pd.DataFrame) -> pd.Series:
+    """
+    Long-Short Portfolio Strategy.
+
+    Economic intuition:
+    Use the cross-sectional extremes of the sentiment distribution as a standard
+    signal validation design. Days with top-20% sentiment are treated as
+    extreme bullish states and go long; days with bottom-20% sentiment are
+    treated as extreme bearish states and go short. The middle 60% is left flat
+    to isolate whether return spreads are concentrated in the sentiment tails.
+
+    Timing note:
+    Signals are generated from information known on day t. The backtest engine
+    should shift the signal by one period when mapping it to t+1 returns.
+
+    Returns:
+        Series with values 1 (long), -1 (short), 0 (hold).
+    """
+    signals = pd.Series(0, index=df.index, dtype="int64")
+    signals.loc[df["extreme_bull"]] = 1
+    signals.loc[df["extreme_bear"]] = -1
+
+    _print_signal_distribution("Strategy A", signals)
+    return signals
+
+
+def strategy_b_signals(df: pd.DataFrame, threshold: float = 0.1) -> pd.Series:
+    """
+    Threshold Strategy.
+
+    Economic intuition:
+    Convert raw daily sentiment into a directional trend-following rule. When
+    sentiment_score is clearly positive, market positioning is assumed to be
+    bullish enough to justify a long trade; when clearly negative, it justifies
+    a short trade. The neutral band around zero avoids trading weak or noisy
+    sentiment states. The threshold is parameterized for robustness testing.
+
+    Timing note:
+    Signals use only contemporaneous sentiment information. Align with future
+    returns in the backtest via a one-period shift.
+
+    Args:
+        threshold: Absolute sentiment cutoff used to enter long/short trades.
+
+    Returns:
+        Series with values 1 (long), -1 (short), 0 (hold).
+    """
+    signals = pd.Series(0, index=df.index, dtype="int64")
+    signals.loc[df["sentiment_score"] > threshold] = 1
+    signals.loc[df["sentiment_score"] < -threshold] = -1
+
+    _print_signal_distribution("Strategy B", signals, extra_label=f"threshold={threshold}")
+    return signals
+
+
+def strategy_c_signals(df: pd.DataFrame, threshold: float = 0.1) -> pd.Series:
+    """
+    Volume Filter Strategy.
+
+    Economic intuition:
+    Start from the threshold rule in Strategy B, then execute only when
+    vote_imbalance is at or above its sample median. The idea is that stronger
+    agreement between bullish and bearish votes implies higher-conviction
+    sentiment, which should reduce noise and improve risk-adjusted performance.
+    Low-conviction days are forced to hold.
+
+    Timing note:
+    The filter and base signal are both formed using information observed on
+    day t. Backtests should shift the final signal by one period before trading.
+
+    Args:
+        threshold: Absolute sentiment cutoff inherited from Strategy B.
+
+    Returns:
+        Series with values 1 (long), -1 (short), 0 (hold).
+    """
+    median_imbalance = df["vote_imbalance"].median()
+    high_conviction = df["vote_imbalance"] >= median_imbalance
+
+    base_signals = strategy_b_signals(df, threshold)
+    signals = base_signals.where(high_conviction, other=0).astype("int64")
+
+    print(
+        f"\nStrategy C filter diagnostics: median_vote_imbalance={median_imbalance:.4f}, "
+        f"retained_non_zero_signals={(signals != 0).sum()}/{(base_signals != 0).sum()}"
+    )
+    _print_signal_distribution(
+        "Strategy C",
+        signals,
+        extra_label=f"vote filter: imbalance>={median_imbalance:.4f}",
+    )
+    return signals
+
+
+def generate_all_signals(df: pd.DataFrame, threshold: float = 0.1) -> pd.DataFrame:
+    """Generate all strategy signals and return a DataFrame copy with signal columns."""
+    print("=" * 50)
+    print("STRATEGY SIGNAL GENERATION")
+    print("=" * 50)
+
+    validate_columns(df)
+    output = df.copy()
+    output["signal_a"] = strategy_a_signals(output)
+    print()
+    output["signal_b"] = strategy_b_signals(output, threshold=threshold)
+    print()
+    output["signal_c"] = strategy_c_signals(output, threshold=threshold)
+
+    effective_b = (output["signal_b"] != 0).sum()
+    effective_c = (output["signal_c"] != 0).sum()
+    reduction_ratio = (
+        float("nan") if effective_b == 0 else 1 - effective_c / effective_b
+    )
+
+    print("\nStrategy Signal Correlation:")
+    print(output[SIGNAL_COLUMNS].corr())
+    print(
+        "\nSignal Coverage Diagnostics:\n"
+        f"  Strategy A non-zero signals: {(output['signal_a'] != 0).sum()}\n"
+        f"  Strategy B non-zero signals: {effective_b}\n"
+        f"  Strategy C non-zero signals: {effective_c}\n"
+        f"  Strategy C reduction vs B: {reduction_ratio:.1%}"
+        if pd.notna(reduction_ratio)
+        else "\nSignal Coverage Diagnostics:\n  Strategy B has no active signals."
+    )
+
+    return output
+
+
+def main() -> None:
+    input_path = Path(INPUT_FILE)
+    if not input_path.exists():
+        raise FileNotFoundError(
+            f"Input file not found: {input_path.resolve()}. "
+            "Run task_002_feature_engineering.py first to generate hsi_features.csv."
+        )
+
+    df = load_data(str(input_path))
+    signal_df = generate_all_signals(df)
+
+    print("\nSignal preview:")
+    preview_columns = [col for col in ["Date", "sentiment_score", *SIGNAL_COLUMNS] if col in signal_df.columns]
+    print(signal_df[preview_columns].head(10).to_string(index=False))
+
+
+if __name__ == "__main__":
+    main()
+apply_patch(auto_approved=true) exited 0 in 94ms:
+Success. Updated the following files:
+A C:\Coding\AI-factory-projects\quantitative-research-workflow\code\task_006_strategy_design.py
+file update:
+diff --git a/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_006_strategy_design.py b/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_006_strategy_design.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..60da4bc50ab2db7feeaa9cc7102027419b36c765
+--- /dev/null
++++ b/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_006_strategy_design.py
+@@ -0,0 +1,193 @@
++from pathlib import Path
++
++import pandas as pd
++
++
++INPUT_FILE = "hsi_features.csv"
++SIGNAL_COLUMNS = ["signal_a", "signal_b", "signal_c"]
++
++
++def load_data(file_path: str) -> pd.DataFrame:
++    """Load feature data generated in Task 002."""
++    print(f"Loading feature data from {file_path}...")
++    df = pd.read_csv(file_path)
++    if "Date" in df.columns:
++        df["Date"] = pd.to_datetime(df["Date"])
++        df = df.sort_values("Date").reset_index(drop=True)
++    print("Feature data loaded.")
++    return df
++
++
++def validate_columns(df: pd.DataFrame) -> None:
++    """Validate that all strategy inputs are available."""
++    required_columns = {
++        "sentiment_score",
++        "vote_imbalance",
++        "extreme_bull",
++        "extreme_bear",
++    }
++    missing_columns = required_columns.difference(df.columns)
++    if missing_columns:
++        missing_str = ", ".join(sorted(missing_columns))
++        raise ValueError(f"Missing required columns: {missing_str}")
++
++
++def _print_signal_distribution(name: str, signals: pd.Series, extra_label: str = "") -> None:
++    """Print a compact distribution summary for a strategy signal series."""
++    header = f"{name} Signal Distribution"
++    if extra_label:
++        header = f"{header} ({extra_label})"
++
++    print(header + ":")
++    print(f"  Long  (1): {(signals == 1).sum()} days ({(signals == 1).mean():.1%})")
++    print(f"  Short (-1): {(signals == -1).sum()} days ({(signals == -1).mean():.1%})")
++    print(f"  Hold  (0): {(signals == 0).sum()} days ({(signals == 0).mean():.1%})")
++
++
++def strategy_a_signals(df: pd.DataFrame) -> pd.Series:
++    """
++    Long-Short Portfolio Strategy.
++
++    Economic intuition:
++    Use the cross-sectional extremes of the sentiment distribution as a standard
++    signal validation design. Days with top-20% sentiment are treated as
++    extreme bullish states and go long; days with bottom-20% sentiment are
++    treated as extreme bearish states and go short. The middle 60% is left flat
++    to isolate whether return spreads are concentrated in the sentiment tails.
++
++    Timing note:
++    Signals are generated from information known on day t. The backtest engine
++    should shift the signal by one period when mapping it to t+1 returns.
++
++    Returns:
++        Series with values 1 (long), -1 (short), 0 (hold).
++    """
++    signals = pd.Series(0, index=df.index, dtype="int64")
++    signals.loc[df["extreme_bull"]] = 1
++    signals.loc[df["extreme_bear"]] = -1
++
++    _print_signal_distribution("Strategy A", signals)
++    return signals
++
++
++def strategy_b_signals(df: pd.DataFrame, threshold: float = 0.1) -> pd.Series:
++    """
++    Threshold Strategy.
++
++    Economic intuition:
++    Convert raw daily sentiment into a directional trend-following rule. When
++    sentiment_score is clearly positive, market positioning is assumed to be
++    bullish enough to justify a long trade; when clearly negative, it justifies
++    a short trade. The neutral band around zero avoids trading weak or noisy
++    sentiment states. The threshold is parameterized for robustness testing.
++
++    Timing note:
++    Signals use only contemporaneous sentiment information. Align with future
++    returns in the backtest via a one-period shift.
++
++    Args:
++        threshold: Absolute sentiment cutoff used to enter long/short trades.
++
++    Returns:
++        Series with values 1 (long), -1 (short), 0 (hold).
++    """
++    signals = pd.Series(0, index=df.index, dtype="int64")
++    signals.loc[df["sentiment_score"] > threshold] = 1
++    signals.loc[df["sentiment_score"] < -threshold] = -1
++
++    _print_signal_distribution("Strategy B", signals, extra_label=f"threshold={threshold}")
++    return signals
++
++
++def strategy_c_signals(df: pd.DataFrame, threshold: float = 0.1) -> pd.Series:
++    """
++    Volume Filter Strategy.
++
++    Economic intuition:
++    Start from the threshold rule in Strategy B, then execute only when
++    vote_imbalance is at or above its sample median. The idea is that stronger
++    agreement between bullish and bearish votes implies higher-conviction
++    sentiment, which should reduce noise and improve risk-adjusted performance.
++    Low-conviction days are forced to hold.
++
++    Timing note:
++    The filter and base signal are both formed using information observed on
++    day t. Backtests should shift the final signal by one period before trading.
++
++    Args:
++        threshold: Absolute sentiment cutoff inherited from Strategy B.
++
++    Returns:
++        Series with values 1 (long), -1 (short), 0 (hold).
++    """
++    median_imbalance = df["vote_imbalance"].median()
++    high_conviction = df["vote_imbalance"] >= median_imbalance
++
++    base_signals = strategy_b_signals(df, threshold)
++    signals = base_signals.where(high_conviction, other=0).astype("int64")
++
++    print(
++        f"\nStrategy C filter diagnostics: median_vote_imbalance={median_imbalance:.4f}, "
++        f"retained_non_zero_signals={(signals != 0).sum()}/{(base_signals != 0).sum()}"
++    )
++    _print_signal_distribution(
++        "Strategy C",
++        signals,
++        extra_label=f"vote filter: imbalance>={median_imbalance:.4f}",
++    )
++    return signals
++
++
++def generate_all_signals(df: pd.DataFrame, threshold: float = 0.1) -> pd.DataFrame:
++    """Generate all strategy signals and return a DataFrame copy with signal columns."""
++    print("=" * 50)
++    print("STRATEGY SIGNAL GENERATION")
++    print("=" * 50)
++
++    validate_columns(df)
++    output = df.copy()
++    output["signal_a"] = strategy_a_signals(output)
++    print()
++    output["signal_b"] = strategy_b_signals(output, threshold=threshold)
++    print()
++    output["signal_c"] = strategy_c_signals(output, threshold=threshold)
++
++    effective_b = (output["signal_b"] != 0).sum()
++    effective_c = (output["signal_c"] != 0).sum()
++    reduction_ratio = (
++        float("nan") if effective_b == 0 else 1 - effective_c / effective_b
++    )
++
++    print("\nStrategy Signal Correlation:")
++    print(output[SIGNAL_COLUMNS].corr())
++    print(
++        "\nSignal Coverage Diagnostics:\n"
++        f"  Strategy A non-zero signals: {(output['signal_a'] != 0).sum()}\n"
++        f"  Strategy B non-zero signals: {effective_b}\n"
++        f"  Strategy C non-zero signals: {effective_c}\n"
++        f"  Strategy C reduction vs B: {reduction_ratio:.1%}"
++        if pd.notna(reduction_ratio)
++        else "\nSignal Coverage Diagnostics:\n  Strategy B has no active signals."
++    )
++
++    return output
++
++
++def main() -> None:
++    input_path = Path(INPUT_FILE)
++    if not input_path.exists():
++        raise FileNotFoundError(
++            f"Input file not found: {input_path.resolve()}. "
++            "Run task_002_feature_engineering.py first to generate hsi_features.csv."
++        )
++
++    df = load_data(str(input_path))
++    signal_df = generate_all_signals(df)
++
++    print("\nSignal preview:")
++    preview_columns = [col for col in ["Date", "sentiment_score", *SIGNAL_COLUMNS] if col in signal_df.columns]
++    print(signal_df[preview_columns].head(10).to_string(index=False))
++
++
++if __name__ == "__main__":
++    main()
+
+file update:
+diff --git a/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_006_strategy_design.py b/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_006_strategy_design.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..60da4bc50ab2db7feeaa9cc7102027419b36c765
+--- /dev/null
++++ b/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_006_strategy_design.py
+@@ -0,0 +1,193 @@
++from pathlib import Path
++
++import pandas as pd
++
++
++INPUT_FILE = "hsi_features.csv"
++SIGNAL_COLUMNS = ["signal_a", "signal_b", "signal_c"]
++
++
++def load_data(file_path: str) -> pd.DataFrame:
++    """Load feature data generated in Task 002."""
++    print(f"Loading feature data from {file_path}...")
++    df = pd.read_csv(file_path)
++    if "Date" in df.columns:
++        df["Date"] = pd.to_datetime(df["Date"])
++        df = df.sort_values("Date").reset_index(drop=True)
++    print("Feature data loaded.")
++    return df
++
++
++def validate_columns(df: pd.DataFrame) -> None:
++    """Validate that all strategy inputs are available."""
++    required_columns = {
++        "sentiment_score",
++        "vote_imbalance",
++        "extreme_bull",
++        "extreme_bear",
++    }
++    missing_columns = required_columns.difference(df.columns)
++    if missing_columns:
++        missing_str = ", ".join(sorted(missing_columns))
++        raise ValueError(f"Missing required columns: {missing_str}")
++
++
++def _print_signal_distribution(name: str, signals: pd.Series, extra_label: str = "") -> None:
++    """Print a compact distribution summary for a strategy signal series."""
++    header = f"{name} Signal Distribution"
++    if extra_label:
++        header = f"{header} ({extra_label})"
++
++    print(header + ":")
++    print(f"  Long  (1): {(signals == 1).sum()} days ({(signals == 1).mean():.1%})")
++    print(f"  Short (-1): {(signals == -1).sum()} days ({(signals == -1).mean():.1%})")
++    print(f"  Hold  (0): {(signals == 0).sum()} days ({(signals == 0).mean():.1%})")
++
++
++def strategy_a_signals(df: pd.DataFrame) -> pd.Series:
++    """
++    Long-Short Portfolio Strategy.
++
++    Economic intuition:
++    Use the cross-sectional extremes of the sentiment distribution as a standard
++    signal validation design. Days with top-20% sentiment are treated as
++    extreme bullish states and go long; days with bottom-20% sentiment are
++    treated as extreme bearish states and go short. The middle 60% is left flat
++    to isolate whether return spreads are concentrated in the sentiment tails.
++
++    Timing note:
++    Signals are generated from information known on day t. The backtest engine
++    should shift the signal by one period when mapping it to t+1 returns.
++
++    Returns:
++        Series with values 1 (long), -1 (short), 0 (hold).
++    """
++    signals = pd.Series(0, index=df.index, dtype="int64")
++    signals.loc[df["extreme_bull"]] = 1
++    signals.loc[df["extreme_bear"]] = -1
++
++    _print_signal_distribution("Strategy A", signals)
++    return signals
++
++
++def strategy_b_signals(df: pd.DataFrame, threshold: float = 0.1) -> pd.Series:
++    """
++    Threshold Strategy.
++
++    Economic intuition:
++    Convert raw daily sentiment into a directional trend-following rule. When
++    sentiment_score is clearly positive, market positioning is assumed to be
++    bullish enough to justify a long trade; when clearly negative, it justifies
++    a short trade. The neutral band around zero avoids trading weak or noisy
++    sentiment states. The threshold is parameterized for robustness testing.
++
++    Timing note:
++    Signals use only contemporaneous sentiment information. Align with future
++    returns in the backtest via a one-period shift.
++
++    Args:
++        threshold: Absolute sentiment cutoff used to enter long/short trades.
++
++    Returns:
++        Series with values 1 (long), -1 (short), 0 (hold).
++    """
++    signals = pd.Series(0, index=df.index, dtype="int64")
++    signals.loc[df["sentiment_score"] > threshold] = 1
++    signals.loc[df["sentiment_score"] < -threshold] = -1
++
++    _print_signal_distribution("Strategy B", signals, extra_label=f"threshold={threshold}")
++    return signals
++
++
++def strategy_c_signals(df: pd.DataFrame, threshold: float = 0.1) -> pd.Series:
++    """
++    Volume Filter Strategy.
++
++    Economic intuition:
++    Start from the threshold rule in Strategy B, then execute only when
++    vote_imbalance is at or above its sample median. The idea is that stronger
++    agreement between bullish and bearish votes implies higher-conviction
++    sentiment, which should reduce noise and improve risk-adjusted performance.
++    Low-conviction days are forced to hold.
++
++    Timing note:
++    The filter and base signal are both formed using information observed on
++    day t. Backtests should shift the final signal by one period before trading.
++
++    Args:
++        threshold: Absolute sentiment cutoff inherited from Strategy B.
++
++    Returns:
++        Series with values 1 (long), -1 (short), 0 (hold).
++    """
++    median_imbalance = df["vote_imbalance"].median()
++    high_conviction = df["vote_imbalance"] >= median_imbalance
++
++    base_signals = strategy_b_signals(df, threshold)
++    signals = base_signals.where(high_conviction, other=0).astype("int64")
++
++    print(
++        f"\nStrategy C filter diagnostics: median_vote_imbalance={median_imbalance:.4f}, "
++        f"retained_non_zero_signals={(signals != 0).sum()}/{(base_signals != 0).sum()}"
++    )
++    _print_signal_distribution(
++        "Strategy C",
++        signals,
++        extra_label=f"vote filter: imbalance>={median_imbalance:.4f}",
++    )
++    return signals
++
++
++def generate_all_signals(df: pd.DataFrame, threshold: float = 0.1) -> pd.DataFrame:
++    """Generate all strategy signals and return a DataFrame copy with signal columns."""
++    print("=" * 50)
++    print("STRATEGY SIGNAL GENERATION")
++    print("=" * 50)
++
++    validate_columns(df)
++    output = df.copy()
++    output["signal_a"] = strategy_a_signals(output)
++    print()
++    output["signal_b"] = strategy_b_signals(output, threshold=threshold)
++    print()
++    output["signal_c"] = strategy_c_signals(output, threshold=threshold)
++
++    effective_b = (output["signal_b"] != 0).sum()
++    effective_c = (output["signal_c"] != 0).sum()
++    reduction_ratio = (
++        float("nan") if effective_b == 0 else 1 - effective_c / effective_b
++    )
++
++    print("\nStrategy Signal Correlation:")
++    print(output[SIGNAL_COLUMNS].corr())
++    print(
++        "\nSignal Coverage Diagnostics:\n"
++        f"  Strategy A non-zero signals: {(output['signal_a'] != 0).sum()}\n"
++        f"  Strategy B non-zero signals: {effective_b}\n"
++        f"  Strategy C non-zero signals: {effective_c}\n"
++        f"  Strategy C reduction vs B: {reduction_ratio:.1%}"
++        if pd.notna(reduction_ratio)
++        else "\nSignal Coverage Diagnostics:\n  Strategy B has no active signals."
++    )
++
++    return output
++
++
++def main() -> None:
++    input_path = Path(INPUT_FILE)
++    if not input_path.exists():
++        raise FileNotFoundError(
++            f"Input file not found: {input_path.resolve()}. "
++            "Run task_002_feature_engineering.py first to generate hsi_features.csv."
++        )
++
++    df = load_data(str(input_path))
++    signal_df = generate_all_signals(df)
++
++    print("\nSignal preview:")
++    preview_columns = [col for col in ["Date", "sentiment_score", *SIGNAL_COLUMNS] if col in signal_df.columns]
++    print(signal_df[preview_columns].head(10).to_string(index=False))
++
++
++if __name__ == "__main__":
++    main()
+
+codex
+代码已经写入，下一步做静态校验，确认脚本可导入、函数签名没问题。如果 `hsi_features.csv` 仍然缺失，我只做语法和导入层面的验证，不伪造数据。
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command 'python -m py_compile task_006_strategy_design.py' in C:\Coding\AI-factory-projects\quantitative-research-workflow\codeexec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command 'Get-Content task_006_strategy_design.py' in C:\Coding\AI-factory-projects\quantitative-research-workflow\code succeeded in 290ms:
+from pathlib import Path
+
+import pandas as pd
+
+
+INPUT_FILE = "hsi_features.csv"
+SIGNAL_COLUMNS = ["signal_a", "signal_b", "signal_c"]
+
+
+def load_data(file_path: str) -> pd.DataFrame:
+    """Load feature data generated in Task 002."""
+    print(f"Loading feature data from {file_path}...")
+    df = pd.read_csv(file_path)
+    if "Date" in df.columns:
+        df["Date"] = pd.to_datetime(df["Date"])
+        df = df.sort_values("Date").reset_index(drop=True)
+    print("Feature data loaded.")
+    return df
+
+
+ succeeded in 340ms:
+
+file update:
+diff --git a/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_006_strategy_design.py b/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_006_strategy_design.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..60da4bc50ab2db7feeaa9cc7102027419b36c765
+--- /dev/null
++++ b/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_006_strategy_design.py
+@@ -0,0 +1,193 @@
++from pathlib import Path
++
++import pandas as pd
++
++
++INPUT_FILE = "hsi_features.csv"
++SIGNAL_COLUMNS = ["signal_a", "signal_b", "signal_c"]
++
++
++def load_data(file_path: str) -> pd.DataFrame:
++    """Load feature data generated in Task 002."""
++    print(f"Loading feature data from {file_path}...")
++    df = pd.read_csv(file_path)
++    if "Date" in df.columns:
++        df["Date"] = pd.to_datetime(df["Date"])
++        df = df.sort_values("Date").reset_index(drop=True)
++    print("Feature data loaded.")
++    return df
++
++
++def validate_columns(df: pd.DataFrame) -> None:
++    """Validate that all strategy inputs are available."""
++    required_columns = {
++        "sentiment_score",
++        "vote_imbalance",
++        "extreme_bull",
++        "extreme_bear",
++    }
++    missing_columns = required_columns.difference(df.columns)
++    if missing_columns:
++        missing_str = ", ".join(sorted(missing_columns))
++        raise ValueError(f"Missing required columns: {missing_str}")
++
++
++def _print_signal_distribution(name: str, signals: pd.Series, extra_label: str = "") -> None:
++    """Print a compact distribution summary for a strategy signal series."""
++    header = f"{name} Signal Distribution"
++    if extra_label:
++        header = f"{header} ({extra_label})"
++
++    print(header + ":")
++    print(f"  Long  (1): {(signals == 1).sum()} days ({(signals == 1).mean():.1%})")
++    print(f"  Short (-1): {(signals == -1).sum()} days ({(signals == -1).mean():.1%})")
++    print(f"  Hold  (0): {(signals == 0).sum()} days ({(signals == 0).mean():.1%})")
++
++
++def strategy_a_signals(df: pd.DataFrame) -> pd.Series:
++    """
++    Long-Short Portfolio Strategy.
++
++    Economic intuition:
++    Use the cross-sectional extremes of the sentiment distribution as a standard
++    signal validation design. Days with top-20% sentiment are treated as
++    extreme bullish states and go long; days with bottom-20% sentiment are
++    treated as extreme bearish states and go short. The middle 60% is left flat
++    to isolate whether return spreads are concentrated in the sentiment tails.
++
++    Timing note:
++    Signals are generated from information known on day t. The backtest engine
++    should shift the signal by one period when mapping it to t+1 returns.
++
++    Returns:
++        Series with values 1 (long), -1 (short), 0 (hold).
++    """
++    signals = pd.Series(0, index=df.index, dtype="int64")
++    signals.loc[df["extreme_bull"]] = 1
++    signals.loc[df["extreme_bear"]] = -1
++
++    _print_signal_distribution("Strategy A", signals)
++    return signals
++
++
++def strategy_b_signals(df: pd.DataFrame, threshold: float = 0.1) -> pd.Series:
++    """
++    Threshold Strategy.
++
++    Economic intuition:
++    Convert raw daily sentiment into a directional trend-following rule. When
++    sentiment_score is clearly positive, market positioning is assumed to be
++    bullish enough to justify a long trade; when clearly negative, it justifies
++    a short trade. The neutral band around zero avoids trading weak or noisy
++    sentiment states. The threshold is parameterized for robustness testing.
++
++    Timing note:
++    Signals use only contemporaneous sentiment information. Align with future
++    returns in the backtest via a one-period shift.
++
++    Args:
++        threshold: Absolute sentiment cutoff used to enter long/short trades.
++
++    Returns:
++        Series with values 1 (long), -1 (short), 0 (hold).
++    """
++    signals = pd.Series(0, index=df.index, dtype="int64")
++    signals.loc[df["sentiment_score"] > threshold] = 1
++    signals.loc[df["sentiment_score"] < -threshold] = -1
++
++    _print_signal_distribution("Strategy B", signals, extra_label=f"threshold={threshold}")
++    return signals
++
++
++def strategy_c_signals(df: pd.DataFrame, threshold: float = 0.1) -> pd.Series:
++    """
++    Volume Filter Strategy.
++
++    Economic intuition:
++    Start from the threshold rule in Strategy B, then execute only when
++    vote_imbalance is at or above its sample median. The idea is that stronger
++    agreement between bullish and bearish votes implies higher-conviction
++    sentiment, which should reduce noise and improve risk-adjusted performance.
++    Low-conviction days are forced to hold.
++
++    Timing note:
++    The filter and base signal are both formed using information observed on
++    day t. Backtests should shift the final signal by one period before trading.
++
++    Args:
++        threshold: Absolute sentiment cutoff inherited from Strategy B.
++
++    Returns:
++        Series with values 1 (long), -1 (short), 0 (hold).
++    """
++    median_imbalance = df["vote_imbalance"].median()
++    high_conviction = df["vote_imbalance"] >= median_imbalance
++
++    base_signals = strategy_b_signals(df, threshold)
++    signals = base_signals.where(high_conviction, other=0).astype("int64")
++
++    print(
++        f"\nStrategy C filter diagnostics: median_vote_imbalance={median_imbalance:.4f}, "
++        f"retained_non_zero_signals={(signals != 0).sum()}/{(base_signals != 0).sum()}"
++    )
++    _print_signal_distribution(
++        "Strategy C",
++        signals,
++        extra_label=f"vote filter: imbalance>={median_imbalance:.4f}",
++    )
++    return signals
++
++
++def generate_all_signals(df: pd.DataFrame, threshold: float = 0.1) -> pd.DataFrame:
++    """Generate all strategy signals and return a DataFrame copy with signal columns."""
++    print("=" * 50)
++    print("STRATEGY SIGNAL GENERATION")
++    print("=" * 50)
++
++    validate_columns(df)
++    output = df.copy()
++    output["signal_a"] = strategy_a_signals(output)
++    print()
++    output["signal_b"] = strategy_b_signals(output, threshold=threshold)
++    print()
++    output["signal_c"] = strategy_c_signals(output, threshold=threshold)
++
++    effective_b = (output["signal_b"] != 0).sum()
++    effective_c = (output["signal_c"] != 0).sum()
++    reduction_ratio = (
++        float("nan") if effective_b == 0 else 1 - effective_c / effective_b
++    )
++
++    print("\nStrategy Signal Correlation:")
++    print(output[SIGNAL_COLUMNS].corr())
++    print(
++        "\nSignal Coverage Diagnostics:\n"
++        f"  Strategy A non-zero signals: {(output['signal_a'] != 0).sum()}\n"
++        f"  Strategy B non-zero signals: {effective_b}\n"
++        f"  Strategy C non-zero signals: {effective_c}\n"
++        f"  Strategy C reduction vs B: {reduction_ratio:.1%}"
++        if pd.notna(reduction_ratio)
++        else "\nSignal Coverage Diagnostics:\n  Strategy B has no active signals."
++    )
++
++    return output
++
++
++def main() -> None:
++    input_path = Path(INPUT_FILE)
++    if not input_path.exists():
++        raise FileNotFoundError(
++            f"Input file not found: {input_path.resolve()}. "
++            "Run task_002_feature_engineering.py first to generate hsi_features.csv."
++        )
++
++    df = load_data(str(input_path))
++    signal_df = generate_all_signals(df)
++
++    print("\nSignal preview:")
++    preview_columns = [col for col in ["Date", "sentiment_score", *SIGNAL_COLUMNS] if col in signal_df.columns]
++    print(signal_df[preview_columns].head(10).to_string(index=False))
++
++
++if __name__ == "__main__":
++    main()
+
+codex
+语法校验通过。我再做一次最小功能验证，用内联样本数据跑三种策略，确认分布打印和汇总逻辑都能正常执行。
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "@'
+import pandas as pd
+from task_006_strategy_design import generate_all_signals
+
+sample = pd.DataFrame({
+    'sentiment_score': [-3, -2, -1, 0, 1, 2, 3, 4, -4, 0],
+    'vote_imbalance': [3, 2, 1, 0, 1, 2, 3, 4, 4, 0],
+    'extreme_bull': [False, False, False, False, False, False, True, True, False, False],
+    'extreme_bear': [False, True, False, False, False, False, False, False, True, False],
+})
+
+result = generate_all_signals(sample, threshold=1)
+print(result[['signal_a', 'signal_b', 'signal_c']].tail(3).to_string(index=False))
+'@ | python -" in C:\Coding\AI-factory-projects\quantitative-research-workflow\code succeeded in 847ms:
+==================================================
+STRATEGY SIGNAL GENERATION
+==================================================
+Strategy A Signal Distribution:
+  Long  (1): 2 days (20.0%)
+  Short (-1): 2 days (20.0%)
+  Hold  (0): 6 days (60.0%)
+
+Strategy B Signal Distribution (threshold=1):
+  Long  (1): 3 days (30.0%)
+  Short (-1): 3 days (30.0%)
+  Hold  (0): 4 days (40.0%)
+
+Strategy B Signal Distribution (threshold=1):
+  Long  (1): 3 days (30.0%)
+  Short (-1): 3 days (30.0%)
+  Hold  (0): 4 days (40.0%)
+
+Strategy C filter diagnostics: median_vote_imbalance=2.0000, retained_non_zero_signals=6/6
+Strategy C Signal Distribution (vote filter: imbalance>=2.0000):
+file update:
+diff --git a/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_006_strategy_design.py b/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_006_strategy_design.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..60da4bc50ab2db7feeaa9cc7102027419b36c765
+--- /dev/null
++++ b/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_006_strategy_design.py
+@@ -0,0 +1,193 @@
++from pathlib import Path
++
++import pandas as pd
++
++
++INPUT_FILE = "hsi_features.csv"
++SIGNAL_COLUMNS = ["signal_a", "signal_b", "signal_c"]
++
++
++def load_data(file_path: str) -> pd.DataFrame:
++    """Load feature data generated in Task 002."""
++    print(f"Loading feature data from {file_path}...")
++    df = pd.read_csv(file_path)
++    if "Date" in df.columns:
++        df["Date"] = pd.to_datetime(df["Date"])
++        df = df.sort_values("Date").reset_index(drop=True)
++    print("Feature data loaded.")
++    return df
++
++
++def validate_columns(df: pd.DataFrame) -> None:
++    """Validate that all strategy inputs are available."""
++    required_columns = {
++        "sentiment_score",
++        "vote_imbalance",
++        "extreme_bull",
++        "extreme_bear",
++    }
++    missing_columns = required_columns.difference(df.columns)
++    if missing_columns:
++        missing_str = ", ".join(sorted(missing_columns))
++        raise ValueError(f"Missing required columns: {missing_str}")
++
++
++def _print_signal_distribution(name: str, signals: pd.Series, extra_label: str = "") -> None:
++    """Print a compact distribution summary for a strategy signal series."""
++    header = f"{name} Signal Distribution"
++    if extra_label:
++        header = f"{header} ({extra_label})"
++
++    print(header + ":")
++    print(f"  Long  (1): {(signals == 1).sum()} days ({(signals == 1).mean():.1%})")
++    print(f"  Short (-1): {(signals == -1).sum()} days ({(signals == -1).mean():.1%})")
++    print(f"  Hold  (0): {(signals == 0).sum()} days ({(signals == 0).mean():.1%})")
++
++
++def strategy_a_signals(df: pd.DataFrame) -> pd.Series:
++    """
++    Long-Short Portfolio Strategy.
++
++    Economic intuition:
++    Use the cross-sectional extremes of the sentiment distribution as a standard
++    signal validation design. Days with top-20% sentiment are treated as
++    extreme bullish states and go long; days with bottom-20% sentiment are
++    treated as extreme bearish states and go short. The middle 60% is left flat
++    to isolate whether return spreads are concentrated in the sentiment tails.
++
++    Timing note:
++    Signals are generated from information known on day t. The backtest engine
++    should shift the signal by one period when mapping it to t+1 returns.
++
++    Returns:
++        Series with values 1 (long), -1 (short), 0 (hold).
++    """
++    signals = pd.Series(0, index=df.index, dtype="int64")
++    signals.loc[df["extreme_bull"]] = 1
++    signals.loc[df["extreme_bear"]] = -1
++
++    _print_signal_distribution("Strategy A", signals)
++    return signals
++
++
++def strategy_b_signals(df: pd.DataFrame, threshold: float = 0.1) -> pd.Series:
++    """
++    Threshold Strategy.
++
++    Economic intuition:
++    Convert raw daily sentiment into a directional trend-following rule. When
++    sentiment_score is clearly positive, market positioning is assumed to be
++    bullish enough to justify a long trade; when clearly negative, it justifies
++    a short trade. The neutral band around zero avoids trading weak or noisy
++    sentiment states. The threshold is parameterized for robustness testing.
++
++    Timing note:
++    Signals use only contemporaneous sentiment information. Align with future
++    returns in the backtest via a one-period shift.
++
++    Args:
++        threshold: Absolute sentiment cutoff used to enter long/short trades.
++
++    Returns:
++        Series with values 1 (long), -1 (short), 0 (hold).
++    """
++    signals = pd.Series(0, index=df.index, dtype="int64")
++    signals.loc[df["sentiment_score"] > threshold] = 1
++    signals.loc[df["sentiment_score"] < -threshold] = -1
++
++    _print_signal_distribution("Strategy B", signals, extra_label=f"threshold={threshold}")
++    return signals
++
++
++def strategy_c_signals(df: pd.DataFrame, threshold: float = 0.1) -> pd.Series:
++    """
++    Volume Filter Strategy.
++
++    Economic intuition:
++    Start from the threshold rule in Strategy B, then execute only when
++    vote_imbalance is at or above its sample median. The idea is that stronger
++    agreement between bullish and bearish votes implies higher-conviction
++    sentiment, which should reduce noise and improve risk-adjusted performance.
++    Low-conviction days are forced to hold.
++
++    Timing note:
++    The filter and base signal are both formed using information observed on
++    day t. Backtests should shift the final signal by one period before trading.
++
++    Args:
++        threshold: Absolute sentiment cutoff inherited from Strategy B.
++
++    Returns:
++        Series with values 1 (long), -1 (short), 0 (hold).
++    """
++    median_imbalance = df["vote_imbalance"].median()
++    high_conviction = df["vote_imbalance"] >= median_imbalance
++
++    base_signals = strategy_b_signals(df, threshold)
++    signals = base_signals.where(high_conviction, other=0).astype("int64")
++
++    print(
++        f"\nStrategy C filter diagnostics: median_vote_imbalance={median_imbalance:.4f}, "
++        f"retained_non_zero_signals={(signals != 0).sum()}/{(base_signals != 0).sum()}"
++    )
++    _print_signal_distribution(
++        "Strategy C",
++        signals,
++        extra_label=f"vote filter: imbalance>={median_imbalance:.4f}",
++    )
++    return signals
++
++
++def generate_all_signals(df: pd.DataFrame, threshold: float = 0.1) -> pd.DataFrame:
++    """Generate all strategy signals and return a DataFrame copy with signal columns."""
++    print("=" * 50)
++    print("STRATEGY SIGNAL GENERATION")
++    print("=" * 50)
++
++    validate_columns(df)
++    output = df.copy()
++    output["signal_a"] = strategy_a_signals(output)
++    print()
++    output["signal_b"] = strategy_b_signals(output, threshold=threshold)
++    print()
++    output["signal_c"] = strategy_c_signals(output, threshold=threshold)
++
++    effective_b = (output["signal_b"] != 0).sum()
++    effective_c = (output["signal_c"] != 0).sum()
++    reduction_ratio = (
++        float("nan") if effective_b == 0 else 1 - effective_c / effective_b
++    )
++
++    print("\nStrategy Signal Correlation:")
++    print(output[SIGNAL_COLUMNS].corr())
++    print(
++        "\nSignal Coverage Diagnostics:\n"
++        f"  Strategy A non-zero signals: {(output['signal_a'] != 0).sum()}\n"
++        f"  Strategy B non-zero signals: {effective_b}\n"
++        f"  Strategy C non-zero signals: {effective_c}\n"
++        f"  Strategy C reduction vs B: {reduction_ratio:.1%}"
++        if pd.notna(reduction_ratio)
++        else "\nSignal Coverage Diagnostics:\n  Strategy B has no active signals."
++    )
++
++    return output
++
++
++def main() -> None:
++    input_path = Path(INPUT_FILE)
++    if not input_path.exists():
++        raise FileNotFoundError(
++            f"Input file not found: {input_path.resolve()}. "
++            "Run task_002_feature_engineering.py first to generate hsi_features.csv."
++        )
++
++    df = load_data(str(input_path))
++    signal_df = generate_all_signals(df)
++
++    print("\nSignal preview:")
++    preview_columns = [col for col in ["Date", "sentiment_score", *SIGNAL_COLUMNS] if col in signal_df.columns]
++    print(signal_df[preview_columns].head(10).to_string(index=False))
++
++
++if __name__ == "__main__":
++    main()
+
+codex
+已实现策略模块 [task_006_strategy_design.py](C:\Coding\AI-factory-projects\quantitative-research-workflow\code\task_006_strategy_design.py)。
+
+这个文件现在包含：
+- `strategy_a_signals(df)`、`strategy_b_signals(df, threshold=0.1)`、`strategy_c_signals(df, threshold=0.1)`，每个都有完整经济直觉和时序对齐说明，明确要求回测端用 `shift(1)` 对齐次期收益。
+- `generate_all_signals(df, threshold=0.1)`，会生成三列信号、打印分布、输出相关性，并额外报告 Strategy C 相对 Strategy B 的信号缩减比例。
+- `load_data()`、`validate_columns()` 和 `main()`，便于直接用 `hsi_features.csv` 做本地验证。
+
+已完成的验证：
+- `python -m py_compile task_006_strategy_design.py` 通过。
+- 用内联样本数据跑通了三种策略和汇总逻辑。
+
+当前限制：
+- 工作区里没有找到 `hsi_features.csv`，所以还不能基于真实数据确认“Strategy A 约 20/20/60”以及“Strategy C 相比 B 约减少 50% 信号数”这两个验收项的实际结果。把 Task 002 产出的 CSV 放到 `code/` 后，直接运行：
+```powershell
+python task_006_strategy_design.py
+```
+就能看到真实分布和诊断输出。
+file update:
+diff --git a/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_006_strategy_design.py b/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_006_strategy_design.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..60da4bc50ab2db7feeaa9cc7102027419b36c765
+--- /dev/null
++++ b/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_006_strategy_design.py
+@@ -0,0 +1,193 @@
++from pathlib import Path
++
++import pandas as pd
++
++
++INPUT_FILE = "hsi_features.csv"
++SIGNAL_COLUMNS = ["signal_a", "signal_b", "signal_c"]
++
++
++def load_data(file_path: str) -> pd.DataFrame:
++    """Load feature data generated in Task 002."""
++    print(f"Loading feature data from {file_path}...")
++    df = pd.read_csv(file_path)
++    if "Date" in df.columns:
++        df["Date"] = pd.to_datetime(df["Date"])
++        df = df.sort_values("Date").reset_index(drop=True)
++    print("Feature data loaded.")
++    return df
++
++
++def validate_columns(df: pd.DataFrame) -> None:
++    """Validate that all strategy inputs are available."""
++    required_columns = {
++        "sentiment_score",
++        "vote_imbalance",
++        "extreme_bull",
++        "extreme_bear",
++    }
++    missing_columns = required_columns.difference(df.columns)
++    if missing_columns:
++        missing_str = ", ".join(sorted(missing_columns))
++        raise ValueError(f"Missing required columns: {missing_str}")
++
++
++def _print_signal_distribution(name: str, signals: pd.Series, extra_label: str = "") -> None:
++    """Print a compact distribution summary for a strategy signal series."""
++    header = f"{name} Signal Distribution"
++    if extra_label:
++        header = f"{header} ({extra_label})"
++
++    print(header + ":")
++    print(f"  Long  (1): {(signals == 1).sum()} days ({(signals == 1).mean():.1%})")
++    print(f"  Short (-1): {(signals == -1).sum()} days ({(signals == -1).mean():.1%})")
++    print(f"  Hold  (0): {(signals == 0).sum()} days ({(signals == 0).mean():.1%})")
++
++
++def strategy_a_signals(df: pd.DataFrame) -> pd.Series:
++    """
++    Long-Short Portfolio Strategy.
++
++    Economic intuition:
++    Use the cross-sectional extremes of the sentiment distribution as a standard
++    signal validation design. Days with top-20% sentiment are treated as
++    extreme bullish states and go long; days with bottom-20% sentiment are
++    treated as extreme bearish states and go short. The middle 60% is left flat
++    to isolate whether return spreads are concentrated in the sentiment tails.
++
++    Timing note:
++    Signals are generated from information known on day t. The backtest engine
++    should shift the signal by one period when mapping it to t+1 returns.
++
++    Returns:
++        Series with values 1 (long), -1 (short), 0 (hold).
++    """
++    signals = pd.Series(0, index=df.index, dtype="int64")
++    signals.loc[df["extreme_bull"]] = 1
++    signals.loc[df["extreme_bear"]] = -1
++
++    _print_signal_distribution("Strategy A", signals)
++    return signals
++
++
++def strategy_b_signals(df: pd.DataFrame, threshold: float = 0.1) -> pd.Series:
++    """
++    Threshold Strategy.
++
++    Economic intuition:
++    Convert raw daily sentiment into a directional trend-following rule. When
++    sentiment_score is clearly positive, market positioning is assumed to be
++    bullish enough to justify a long trade; when clearly negative, it justifies
++    a short trade. The neutral band around zero avoids trading weak or noisy
++    sentiment states. The threshold is parameterized for robustness testing.
++
++    Timing note:
++    Signals use only contemporaneous sentiment information. Align with future
++    returns in the backtest via a one-period shift.
++
++    Args:
++        threshold: Absolute sentiment cutoff used to enter long/short trades.
++
++    Returns:
++        Series with values 1 (long), -1 (short), 0 (hold).
++    """
++    signals = pd.Series(0, index=df.index, dtype="int64")
++    signals.loc[df["sentiment_score"] > threshold] = 1
++    signals.loc[df["sentiment_score"] < -threshold] = -1
++
++    _print_signal_distribution("Strategy B", signals, extra_label=f"threshold={threshold}")
++    return signals
++
++
++def strategy_c_signals(df: pd.DataFrame, threshold: float = 0.1) -> pd.Series:
++    """
++    Volume Filter Strategy.
++
++    Economic intuition:
++    Start from the threshold rule in Strategy B, then execute only when
++    vote_imbalance is at or above its sample median. The idea is that stronger
++    agreement between bullish and bearish votes implies higher-conviction
++    sentiment, which should reduce noise and improve risk-adjusted performance.
++    Low-conviction days are forced to hold.
++
++    Timing note:
++    The filter and base signal are both formed using information observed on
++    day t. Backtests should shift the final signal by one period before trading.
++
++    Args:
++        threshold: Absolute sentiment cutoff inherited from Strategy B.
++
++    Returns:
++        Series with values 1 (long), -1 (short), 0 (hold).
++    """
++    median_imbalance = df["vote_imbalance"].median()
++    high_conviction = df["vote_imbalance"] >= median_imbalance
++
++    base_signals = strategy_b_signals(df, threshold)
++    signals = base_signals.where(high_conviction, other=0).astype("int64")
++
++    print(
++        f"\nStrategy C filter diagnostics: median_vote_imbalance={median_imbalance:.4f}, "
++        f"retained_non_zero_signals={(signals != 0).sum()}/{(base_signals != 0).sum()}"
++    )
++    _print_signal_distribution(
++        "Strategy C",
++        signals,
++        extra_label=f"vote filter: imbalance>={median_imbalance:.4f}",
++    )
++    return signals
++
++
++def generate_all_signals(df: pd.DataFrame, threshold: float = 0.1) -> pd.DataFrame:
++    """Generate all strategy signals and return a DataFrame copy with signal columns."""
++    print("=" * 50)
++    print("STRATEGY SIGNAL GENERATION")
++    print("=" * 50)
++
++    validate_columns(df)
++    output = df.copy()
++    output["signal_a"] = strategy_a_signals(output)
++    print()
++    output["signal_b"] = strategy_b_signals(output, threshold=threshold)
++    print()
++    output["signal_c"] = strategy_c_signals(output, threshold=threshold)
++
++    effective_b = (output["signal_b"] != 0).sum()
++    effective_c = (output["signal_c"] != 0).sum()
++    reduction_ratio = (
++        float("nan") if effective_b == 0 else 1 - effective_c / effective_b
++    )
++
++    print("\nStrategy Signal Correlation:")
++    print(output[SIGNAL_COLUMNS].corr())
++    print(
++        "\nSignal Coverage Diagnostics:\n"
++        f"  Strategy A non-zero signals: {(output['signal_a'] != 0).sum()}\n"
++        f"  Strategy B non-zero signals: {effective_b}\n"
++        f"  Strategy C non-zero signals: {effective_c}\n"
++        f"  Strategy C reduction vs B: {reduction_ratio:.1%}"
++        if pd.notna(reduction_ratio)
++        else "\nSignal Coverage Diagnostics:\n  Strategy B has no active signals."
++    )
++
++    return output
++
++
++def main() -> None:
++    input_path = Path(INPUT_FILE)
++    if not input_path.exists():
++        raise FileNotFoundError(
++            f"Input file not found: {input_path.resolve()}. "
++            "Run task_002_feature_engineering.py first to generate hsi_features.csv."
++        )
++
++    df = load_data(str(input_path))
++    signal_df = generate_all_signals(df)
++
++    print("\nSignal preview:")
++    preview_columns = [col for col in ["Date", "sentiment_score", *SIGNAL_COLUMNS] if col in signal_df.columns]
++    print(signal_df[preview_columns].head(10).to_string(index=False))
++
++
++if __name__ == "__main__":
++    main()
+
+tokens used
+18,893
+已实现策略模块 [task_006_strategy_design.py](C:\Coding\AI-factory-projects\quantitative-research-workflow\code\task_006_strategy_design.py)。
+
+这个文件现在包含：
+- `strategy_a_signals(df)`、`strategy_b_signals(df, threshold=0.1)`、`strategy_c_signals(df, threshold=0.1)`，每个都有完整经济直觉和时序对齐说明，明确要求回测端用 `shift(1)` 对齐次期收益。
+- `generate_all_signals(df, threshold=0.1)`，会生成三列信号、打印分布、输出相关性，并额外报告 Strategy C 相对 Strategy B 的信号缩减比例。
+- `load_data()`、`validate_columns()` 和 `main()`，便于直接用 `hsi_features.csv` 做本地验证。
+
+已完成的验证：
+- `python -m py_compile task_006_strategy_design.py` 通过。
+- 用内联样本数据跑通了三种策略和汇总逻辑。
+
+当前限制：
+- 工作区里没有找到 `hsi_features.csv`，所以还不能基于真实数据确认“Strategy A 约 20/20/60”以及“Strategy C 相比 B 约减少 50% 信号数”这两个验收项的实际结果。把 Task 002 产出的 CSV 放到 `code/` 后，直接运行：
+```powershell
+python task_006_strategy_design.py
+```
+就能看到真实分布和诊断输出。

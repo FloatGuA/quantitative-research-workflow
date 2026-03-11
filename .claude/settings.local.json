@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cd \"C:/Coding/AI-factory-projects/quantitative-research-workflow/code\" && jupyter nbconvert --to notebook --execute research_report.ipynb --output research_report_executed.ipynb 2>&1)",
+      "Bash(which python3:*)",
+      "Bash(python -m pip install nbconvert nbclient nbformat 2>&1)",
+      "Bash(cd \"C:/Coding/AI-factory-projects/quantitative-research-workflow/code\" && python -m jupyter nbconvert --to notebook --execute research_report.ipynb --output research_report_executed.ipynb 2>&1)",
+      "Bash(cd \"C:/Coding/AI-factory-projects/quantitative-research-workflow/code\" && python create_research_report.py 2>&1)",
+      "Bash(cd \"C:/Coding/AI-factory-projects/quantitative-research-workflow/code\" && python -m jupyter nbconvert --to notebook --execute research_report_zh.ipynb --output research_report_zh_executed.ipynb 2>&1)"
+    ]
+  }
+}

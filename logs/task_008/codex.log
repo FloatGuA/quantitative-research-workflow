@@ -1,0 +1,1968 @@
+# Codex Log: Task 008 - Robustness
+
+## Prompt
+
+# Task 008 — 稳健性检验
+
+## 目标
+通过参数敏感性分析、滞后信号检验、去极值分析和滚动 Sharpe，评估策略结论的稳健性。
+
+## 工作目录
+`code/`
+
+## 依赖
+- `hsi_features.csv`（Task 002 输出）
+- 需复用 Task 007 的 `run_backtest` 和 `calculate_metrics` 函数逻辑
+
+## 输出文件
+- `task_008_robustness.py` — 稳健性检验模块
+
+## 详细要求
+
+### 1. 阈值敏感性分析（Strategy B）
+测试不同阈值下的 Sharpe Ratio：
+
+```python
+thresholds = [0.0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3]
+sensitivity_results = []
+
+for thresh in thresholds:
+    signals = (df['sentiment_score'] > thresh).astype(int) - (df['sentiment_score'] < -thresh).astype(int)
+    port = run_backtest(df, signals, fee_rate=0.001)
+    metrics = calculate_metrics(port)
+    sensitivity_results.append({
+        'threshold': thresh,
+        'sharpe': float(metrics['Sharpe Ratio']),
+        'annual_return': float(metrics['Annual Return'].strip('%')) / 100,
+        'max_drawdown': float(metrics['Max Drawdown'].strip('%')) / 100
+    })
+
+sens_df = pd.DataFrame(sensitivity_results)
+print("Threshold Sensitivity Analysis:")
+print(sens_df.to_string(index=False))
+
+# 可视化
+fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+axes[0].plot(sens_df['threshold'], sens_df['sharpe'], 'bo-')
+axes[0].set_title('Sharpe vs Threshold')
+axes[1].plot(sens_df['threshold'], sens_df['annual_return'], 'go-')
+axes[1].set_title('Annual Return vs Threshold')
+axes[2].plot(sens_df['threshold'], sens_df['max_drawdown'], 'ro-')
+axes[2].set_title('Max Drawdown vs Threshold')
+plt.tight_layout()
+plt.savefig('fig_14_sensitivity.png', dpi=150)
+plt.show()
+```
+
+### 2. 滞后信号检验
+使用 lag1/2/3 信号运行相同策略，检验 IC 衰减是否影响策略绩效：
+
+```python
+lag_results = []
+for lag in [0, 1, 2, 3]:
+    if lag == 0:
+        score = df['sentiment_score']
+    else:
+        score = df[f'sentiment_lag{lag}']
+
+    signals = (score > 0.1).astype(int) - (score < -0.1).astype(int)
+    port = run_backtest(df, signals, fee_rate=0.001)
+    metrics = calculate_metrics(port)
+    lag_results.append({'lag': lag, **{k: v for k, v in metrics.items()}})
+
+lag_df = pd.DataFrame(lag_results)
+print("\nLag Signal Analysis:")
+print(lag_df[['lag', 'Sharpe Ratio', 'Annual Return', 'Max Drawdown']].to_string(index=False))
+```
+
+### 3. 去极值后重跑
+Winsorize sentiment_score 的 top/bottom 1%，去除极端噪声：
+
+```python
+from scipy.stats import mstats
+
+# Winsorize: 裁截 top/bottom 1%
+df_win = df.copy()
+df_win['sentiment_winsorized'] = mstats.winsorize(df['sentiment_score'].fillna(0), limits=[0.01, 0.01])
+
+signals_win = (df_win['sentiment_winsorized'] > 0.1).astype(int) - \
+              (df_win['sentiment_winsorized'] < -0.1).astype(int)
+
+port_original = run_backtest(df, (df['sentiment_score'] > 0.1).astype(int) - (df['sentiment_score'] < -0.1).astype(int), fee_rate=0.001)
+port_winsorized = run_backtest(df, signals_win, fee_rate=0.001)
+
+metrics_orig = calculate_metrics(port_original)
+metrics_win = calculate_metrics(port_winsorized)
+
+print("\nOutlier Removal Analysis (Strategy B, with fee):")
+print(f"{'Metric':<20} {'Original':>12} {'Winsorized':>12}")
+for key in ['Sharpe Ratio', 'Annual Return', 'Max Drawdown']:
+    print(f"{key:<20} {metrics_orig[key]:>12} {metrics_win[key]:>12}")
+```
+
+### 4. 滚动 Sharpe（12 个月窗口）
+```python
+def rolling_sharpe(portfolio, window=252, annual_factor=252):
+    """计算滚动 Sharpe"""
+    returns = portfolio['strategy_return']
+    roll_mean = returns.rolling(window).mean()
+    roll_std = returns.rolling(window).std()
+    roll_sharpe = (roll_mean / roll_std) * np.sqrt(annual_factor)
+    return roll_sharpe
+
+fig, ax = plt.subplots(figsize=(14, 5))
+for name in ['Strategy_A', 'Strategy_B', 'Strategy_C']:
+    port = results[f'{name}_no_fee']['portfolio']
+    rs = rolling_sharpe(port)
+    ax.plot(port['Date'], rs, label=name, alpha=0.8)
+
+ax.axhline(0, color='black', linestyle='--', alpha=0.5)
+ax.set_title('Rolling 12-Month Sharpe Ratio')
+ax.set_xlabel('Date')
+ax.set_ylabel('Sharpe Ratio')
+ax.legend()
+plt.tight_layout()
+plt.savefig('fig_15_rolling_sharpe.png', dpi=150)
+plt.show()
+```
+
+### 5. 过拟合风险讨论
+```python
+overfitting_discussion = """
+## Overfitting Risk Discussion
+
+1. **In-sample only**: All analysis is performed on the full dataset without out-of-sample validation.
+   The results may be optimistic due to data snooping.
+
+2. **Threshold selection**: The ±0.1 threshold for Strategy B was chosen based on visual inspection.
+   Sensitivity analysis shows results are relatively stable across thresholds [0.05, 0.2].
+
+3. **Limited history**: 747 trading days (~3 years) is a relatively short period.
+   The strategy has not been tested across a full market cycle.
+
+4. **Survivorship bias**: HSI is a market-cap weighted index; constituent changes are not modeled.
+
+5. **Recommendation**: Forward-test the strategy on 2025 data before live deployment.
+"""
+print(overfitting_discussion)
+```
+
+## 代码规范
+- 敏感性分析遍历参数列表，结果存入 DataFrame
+- 打印格式化对比表
+- 过拟合风险以 Markdown 格式输出
+
+## 验收标准
+- [ ] 7 个阈值的敏感性分析完成，含可视化
+- [ ] lag0/1/2/3 信号对比完成
+- [ ] Winsorize 前后对比完成
+- [ ] 滚动 Sharpe 图生成（3 条策略曲线）
+- [ ] 过拟合风险讨论文字输出
+
+<!-- FACTORY:DONE -->
+
+
+## Output
+
+OpenAI Codex v0.111.0 (research preview)
+--------
+workdir: C:\Coding\AI-factory-projects\quantitative-research-workflow\code
+model: gpt-5.4
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, C:\Users\86579\.codex\memories]
+reasoning effort: none
+reasoning summaries: none
+session id: 019cdde9-2f3c-7a52-91e5-761a0d2a924f
+--------
+user
+# Task 008 — 稳健性检验
+
+## 目标
+通过参数敏感性分析、滞后信号检验、去极值分析和滚动 Sharpe，评估策略结论的稳健性。
+
+## 工作目录
+`code/`
+
+## 依赖
+- `hsi_features.csv`（Task 002 输出）
+- 需复用 Task 007 的 `run_backtest` 和 `calculate_metrics` 函数逻辑
+
+## 输出文件
+- `task_008_robustness.py` — 稳健性检验模块
+
+## 详细要求
+
+### 1. 阈值敏感性分析（Strategy B）
+测试不同阈值下的 Sharpe Ratio：
+
+```python
+thresholds = [0.0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3]
+sensitivity_results = []
+
+for thresh in thresholds:
+    signals = (df['sentiment_score'] > thresh).astype(int) - (df['sentiment_score'] < -thresh).astype(int)
+    port = run_backtest(df, signals, fee_rate=0.001)
+    metrics = calculate_metrics(port)
+    sensitivity_results.append({
+        'threshold': thresh,
+        'sharpe': float(metrics['Sharpe Ratio']),
+        'annual_return': float(metrics['Annual Return'].strip('%')) / 100,
+        'max_drawdown': float(metrics['Max Drawdown'].strip('%')) / 100
+    })
+
+sens_df = pd.DataFrame(sensitivity_results)
+print("Threshold Sensitivity Analysis:")
+print(sens_df.to_string(index=False))
+
+# 可视化
+fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+axes[0].plot(sens_df['threshold'], sens_df['sharpe'], 'bo-')
+axes[0].set_title('Sharpe vs Threshold')
+axes[1].plot(sens_df['threshold'], sens_df['annual_return'], 'go-')
+axes[1].set_title('Annual Return vs Threshold')
+axes[2].plot(sens_df['threshold'], sens_df['max_drawdown'], 'ro-')
+axes[2].set_title('Max Drawdown vs Threshold')
+plt.tight_layout()
+plt.savefig('fig_14_sensitivity.png', dpi=150)
+plt.show()
+```
+
+### 2. 滞后信号检验
+使用 lag1/2/3 信号运行相同策略，检验 IC 衰减是否影响策略绩效：
+
+```python
+lag_results = []
+for lag in [0, 1, 2, 3]:
+    if lag == 0:
+        score = df['sentiment_score']
+    else:
+        score = df[f'sentiment_lag{lag}']
+
+    signals = (score > 0.1).astype(int) - (score < -0.1).astype(int)
+    port = run_backtest(df, signals, fee_rate=0.001)
+    metrics = calculate_metrics(port)
+    lag_results.append({'lag': lag, **{k: v for k, v in metrics.items()}})
+
+lag_df = pd.DataFrame(lag_results)
+print("\nLag Signal Analysis:")
+print(lag_df[['lag', 'Sharpe Ratio', 'Annual Return', 'Max Drawdown']].to_string(index=False))
+```
+
+### 3. 去极值后重跑
+Winsorize sentiment_score 的 top/bottom 1%，去除极端噪声：
+
+```python
+from scipy.stats import mstats
+
+# Winsorize: 裁截 top/bottom 1%
+df_win = df.copy()
+df_win['sentiment_winsorized'] = mstats.winsorize(df['sentiment_score'].fillna(0), limits=[0.01, 0.01])
+
+signals_win = (df_win['sentiment_winsorized'] > 0.1).astype(int) - \
+              (df_win['sentiment_winsorized'] < -0.1).astype(int)
+
+port_original = run_backtest(df, (df['sentiment_score'] > 0.1).astype(int) - (df['sentiment_score'] < -0.1).astype(int), fee_rate=0.001)
+port_winsorized = run_backtest(df, signals_win, fee_rate=0.001)
+
+metrics_orig = calculate_metrics(port_original)
+metrics_win = calculate_metrics(port_winsorized)
+
+print("\nOutlier Removal Analysis (Strategy B, with fee):")
+print(f"{'Metric':<20} {'Original':>12} {'Winsorized':>12}")
+for key in ['Sharpe Ratio', 'Annual Return', 'Max Drawdown']:
+    print(f"{key:<20} {metrics_orig[key]:>12} {metrics_win[key]:>12}")
+```
+
+### 4. 滚动 Sharpe（12 个月窗口）
+```python
+def rolling_sharpe(portfolio, window=252, annual_factor=252):
+    """计算滚动 Sharpe"""
+    returns = portfolio['strategy_return']
+    roll_mean = returns.rolling(window).mean()
+    roll_std = returns.rolling(window).std()
+    roll_sharpe = (roll_mean / roll_std) * np.sqrt(annual_factor)
+    return roll_sharpe
+
+fig, ax = plt.subplots(figsize=(14, 5))
+for name in ['Strategy_A', 'Strategy_B', 'Strategy_C']:
+    port = results[f'{name}_no_fee']['portfolio']
+    rs = rolling_sharpe(port)
+    ax.plot(port['Date'], rs, label=name, alpha=0.8)
+
+ax.axhline(0, color='black', linestyle='--', alpha=0.5)
+ax.set_title('Rolling 12-Month Sharpe Ratio')
+ax.set_xlabel('Date')
+ax.set_ylabel('Sharpe Ratio')
+ax.legend()
+plt.tight_layout()
+plt.savefig('fig_15_rolling_sharpe.png', dpi=150)
+plt.show()
+```
+
+### 5. 过拟合风险讨论
+```python
+overfitting_discussion = """
+## Overfitting Risk Discussion
+
+1. **In-sample only**: All analysis is performed on the full dataset without out-of-sample validation.
+   The results may be optimistic due to data snooping.
+
+2. **Threshold selection**: The ±0.1 threshold for Strategy B was chosen based on visual inspection.
+   Sensitivity analysis shows results are relatively stable across thresholds [0.05, 0.2].
+
+3. **Limited history**: 747 trading days (~3 years) is a relatively short period.
+   The strategy has not been tested across a full market cycle.
+
+4. **Survivorship bias**: HSI is a market-cap weighted index; constituent changes are not modeled.
+
+5. **Recommendation**: Forward-test the strategy on 2025 data before live deployment.
+"""
+print(overfitting_discussion)
+```
+
+## 代码规范
+- 敏感性分析遍历参数列表，结果存入 DataFrame
+- 打印格式化对比表
+- 过拟合风险以 Markdown 格式输出
+
+## 验收标准
+- [ ] 7 个阈值的敏感性分析完成，含可视化
+- [ ] lag0/1/2/3 信号对比完成
+- [ ] Winsorize 前后对比完成
+- [ ] 滚动 Sharpe 图生成（3 条策略曲线）
+- [ ] 过拟合风险讨论文字输出
+
+<!-- FACTORY:DONE -->
+
+mcp startup: no servers
+codex
+先检查现有代码结构，定位 Task 007 的回测函数实现和 `hsi_features.csv` 的路径，再据此新增 `task_008_robustness.py`。
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command 'Get-ChildItem -Force' in C:\Coding\AI-factory-projects\quantitative-research-workflow\codeexec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command 'rg -n "def run_backtest|def calculate_metrics|Strategy_A|Strategy_B|Strategy_C" -S .' in C:\Coding\AI-factory-projects\quantitative-research-workflow\code succeeded in 381ms:
+.\task_007_backtest.py:64:def run_backtest(df: pd.DataFrame, signals: pd.Series, fee_rate: float = 0.0) -> pd.DataFrame:
+.\task_007_backtest.py:103:def calculate_metrics(portfolio: pd.DataFrame, annual_factor: int = ANNUAL_FACTOR) -> dict[str, str | int]:
+.\task_007_backtest.py:167:        "Strategy_A": df["signal_a"],
+.\task_007_backtest.py:168:        "Strategy_B": df["signal_b"],
+.\task_007_backtest.py:169:        "Strategy_C": df["signal_c"],
+.\task_007_backtest.py:190:        "Strategy_A": "#1f77b4",
+.\task_007_backtest.py:191:        "Strategy_B": "#ff7f0e",
+.\task_007_backtest.py:192:        "Strategy_C": "#2ca02c",
+.\task_007_backtest.py:261:    strategies = ["Strategy_A", "Strategy_B", "Strategy_C"]
+.\task_007_backtest.py:296:    plot_monthly_heatmap(results["Strategy_A_no_fee"]["portfolio"])
+ succeeded in 391ms:
+
+
+    目录: C:\Coding\AI-factory-projects\quantitative-research-workflow\code
+
+
+Mode                 LastWriteTime         Length Name                                                                 
+----                 -------------         ------ ----                                                                 
+d-----         2026/3/12      1:19                __pycache__                                                          
+-a----         2026/3/12      1:10           2802 task_001_data_loading.py                                             
+-a----         2026/3/12      1:11           3991 task_002_feature_engineering.py                                      
+-a----         2026/3/12      1:12           6707 task_003_eda.py                                                      
+-a----         2026/3/12      1:14           6835 task_004_signal_analysis.py                                          
+-a----         2026/3/12      1:15           9255 task_005_insights.py                                                 
+-a----         2026/3/12      1:17           6952 task_006_strategy_design.py                                          
+-a----         2026/3/12      1:19          10539 task_007_backtest.py                                                 
+
+
+codex
+已定位到 Task 007 的核心函数。我接着读实现细节和数据文件约定，确保 Task 008 直接复用相同口径而不是重新发明一套回测逻辑。
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command 'Get-Content task_007_backtest.py' in C:\Coding\AI-factory-projects\quantitative-research-workflow\codeexec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command 'Get-Content task_002_feature_engineering.py' in C:\Coding\AI-factory-projects\quantitative-research-workflow\code succeeded in 416ms:
+from pathlib import Path
+
+import pandas as pd
+
+
+INPUT_FILE = "hsi_clean.csv"
+OUTPUT_FILE = "hsi_features.csv"
+FEATURE_SUMMARY_COLUMNS = [
+    "sentiment_score",
+    "vote_imbalance",
+    "return_open",
+    "return_close",
+]
+
+
+def load_data(file_path: str) -> pd.DataFrame:
+    print(f"Loading clean data from {file_path}...")
+    df = pd.read_csv(file_path)
+    if "Date" in df.columns:
+        df["Date"] = pd.to_datetime(df["Date"])
+ succeeded in 444ms:
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import seaborn as sns
+
+from task_006_strategy_design import SIGNAL_COLUMNS, generate_all_signals
+
+
+INPUT_FILE = "hsi_features.csv"
+FEE_RATE = 0.001
+ANNUAL_FACTOR = 252
+REQUIRED_COLUMNS = {"Date", "return_open", "return_close"}
+FIG_CUM_RETURNS = "fig_10_cum_returns.png"
+FIG_DRAWDOWN = "fig_11_drawdown.png"
+FIG_MONTHLY_HEATMAP = "fig_12_monthly_heatmap.png"
+FIG_RETURN_DIST = "fig_13_return_dist.png"
+
+
+codex
+Task 008 的实现会直接导入 Task 007 的 `run_backtest` / `calculate_metrics`，并复用同一套数据加载、信号生成口径。接下来补足 Strategy A/B/C 的来源，避免滚动 Sharpe 部分依赖不清。
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command 'Get-Content task_006_strategy_design.py' in C:\Coding\AI-factory-projects\quantitative-research-workflow\codeexec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command 'Test-Path hsi_features.csv; if ($?) { Get-Item hsi_features.csv | Select-Object Name,Length,LastWriteTime }' in C:\Coding\AI-factory-projects\quantitative-research-workflow\code succeeded in 493ms:
+from pathlib import Path
+
+import pandas as pd
+
+
+INPUT_FILE = "hsi_features.csv"
+SIGNAL_COLUMNS = ["signal_a", "signal_b", "signal_c"]
+
+
+def load_data(file_path: str) -> pd.DataFrame:
+    """Load feature data generated in Task 002."""
+    print(f"Loading feature data from {file_path}...")
+    df = pd.read_csv(file_path)
+    if "Date" in df.columns:
+        df["Date"] = pd.to_datetime(df["Date"])
+        df = df.sort_values("Date").reset_index(drop=True)
+    print("Feature data loaded.")
+    return df
+
+
+ exited 1 in 616ms:
+False
+Get-Item : 找不到路径“C:\Coding\AI-factory-projects\quantitative-research-workflow\code\hsi_features.csv”，因为该路径不存在。
+所在位置 行:2 字符: 39
++ ... st-Path hsi_features.csv; if ($?) { Get-Item hsi_features.csv | Selec ...
++                                         ~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (C:\Coding\AI-fa...si_features.csv:String) [Get-Item], ItemNotFoundExcep 
+   tion
+    + FullyQualifiedErrorId : PathNotFound,Microsoft.PowerShell.Commands.GetItemCommand
+ 
+codex
+准备新增 `task_008_robustness.py`。实现会分成独立分析函数，主流程只负责加载数据、生成三类策略组合、输出表格和保存两张图，便于后续单独复用。
+file update
+A C:\Coding\AI-factory-projects\quantitative-research-workflow\code\task_008_robustness.py
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from scipy.stats import mstats
+
+from task_007_backtest import (
+    FEE_RATE,
+    INPUT_FILE,
+    calculate_metrics,
+    configure_plot_style,
+    ensure_signals,
+    load_data,
+    run_backtest,
+    save_and_close,
+    validate_columns,
+)
+
+
+FIG_SENSITIVITY = "fig_14_sensitivity.png"
+FIG_ROLLING_SHARPE = "fig_15_rolling_sharpe.png"
+SENSITIVITY_THRESHOLDS = [0.0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3]
+ROBUSTNESS_THRESHOLD = 0.1
+ROLLING_WINDOW = 252
+
+
+def parse_percent(value: str) -> float:
+    """Convert a formatted percent string like '12.34%' to decimal."""
+    return float(value.strip("%")) / 100
+
+
+def parse_float(value: str) -> float:
+    """Convert a formatted numeric string to float."""
+    return float(value)
+
+
+def threshold_sensitivity_analysis(df: pd.DataFrame) -> pd.DataFrame:
+    """Run Strategy B threshold sensitivity analysis and save the chart."""
+    sensitivity_results: list[dict[str, float]] = []
+
+    for threshold in SENSITIVITY_THRESHOLDS:
+        signals = (df["sentiment_score"] > threshold).astype(int) - (
+            df["sentiment_score"] < -threshold
+        ).astype(int)
+        portfolio = run_backtest(df, signals, fee_rate=FEE_RATE)
+        metrics = calculate_metrics(portfolio)
+        sensitivity_results.append(
+            {
+                "threshold": threshold,
+                "sharpe": parse_float(str(metrics["Sharpe Ratio"])),
+                "annual_return": parse_percent(str(metrics["Annual Return"])),
+                "max_drawdown": parse_percent(str(metrics["Max Drawdown"])),
+            }
+        )
+
+    sensitivity_df = pd.DataFrame(sensitivity_results)
+    print("Threshold Sensitivity Analysis:")
+    print(sensitivity_df.to_string(index=False))
+
+    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+    axes[0].plot(sensitivity_df["threshold"], sensitivity_df["sharpe"], "bo-")
+    axes[0].set_title("Sharpe vs Threshold")
+    axes[0].set_xlabel("Threshold")
+    axes[0].set_ylabel("Sharpe Ratio")
+
+    axes[1].plot(sensitivity_df["threshold"], sensitivity_df["annual_return"], "go-")
+    axes[1].set_title("Annual Return vs Threshold")
+    axes[1].set_xlabel("Threshold")
+    axes[1].set_ylabel("Annual Return")
+
+    axes[2].plot(sensitivity_df["threshold"], sensitivity_df["max_drawdown"], "ro-")
+    axes[2].set_title("Max Drawdown vs Threshold")
+    axes[2].set_xlabel("Threshold")
+    axes[2].set_ylabel("Max Drawdown")
+
+    save_and_close(fig, FIG_SENSITIVITY)
+    return sensitivity_df
+
+
+def lag_signal_analysis(df: pd.DataFrame) -> pd.DataFrame:
+    """Compare performance using current and lagged sentiment signals."""
+    lag_results: list[dict[str, str | int]] = []
+
+    for lag in [0, 1, 2, 3]:
+        score = df["sentiment_score"] if lag == 0 else df[f"sentiment_lag{lag}"]
+        signals = (score > ROBUSTNESS_THRESHOLD).astype(int) - (
+            score < -ROBUSTNESS_THRESHOLD
+        ).astype(int)
+        portfolio = run_backtest(df, signals, fee_rate=FEE_RATE)
+        metrics = calculate_metrics(portfolio)
+        lag_results.append({"lag": lag, **metrics})
+
+    lag_df = pd.DataFrame(lag_results)
+    print("\nLag Signal Analysis:")
+    print(
+        lag_df[["lag", "Sharpe Ratio", "Annual Return", "Max Drawdown"]].to_string(
+            index=False
+        )
+    )
+    return lag_df
+
+
+def outlier_removal_analysis(df: pd.DataFrame) -> pd.DataFrame:
+    """Winsorize extreme sentiment values and compare performance."""
+    winsorized_df = df.copy()
+    winsorized_df["sentiment_winsorized"] = mstats.winsorize(
+        df["sentiment_score"].fillna(0),
+        limits=[0.01, 0.01],
+    )
+
+    original_signals = (df["sentiment_score"] > ROBUSTNESS_THRESHOLD).astype(int) - (
+        df["sentiment_score"] < -ROBUSTNESS_THRESHOLD
+    ).astype(int)
+    winsorized_signals = (
+        winsorized_df["sentiment_winsorized"] > ROBUSTNESS_THRESHOLD
+    ).astype(int) - (
+        winsorized_df["sentiment_winsorized"] < -ROBUSTNESS_THRESHOLD
+    ).astype(int)
+
+    original_portfolio = run_backtest(df, original_signals, fee_rate=FEE_RATE)
+    winsorized_portfolio = run_backtest(df, winsorized_signals, fee_rate=FEE_RATE)
+
+    metrics_original = calculate_metrics(original_portfolio)
+    metrics_winsorized = calculate_metrics(winsorized_portfolio)
+
+    comparison_df = pd.DataFrame(
+        {
+            "Metric": ["Sharpe Ratio", "Annual Return", "Max Drawdown"],
+            "Original": [
+                metrics_original["Sharpe Ratio"],
+                metrics_original["Annual Return"],
+                metrics_original["Max Drawdown"],
+            ],
+            "Winsorized": [
+                metrics_winsorized["Sharpe Ratio"],
+                metrics_winsorized["Annual Return"],
+                metrics_winsorized["Max Drawdown"],
+            ],
+        }
+    )
+
+    print("\nOutlier Removal Analysis (Strategy B, with fee):")
+    print(comparison_df.to_string(index=False))
+    return comparison_df
+
+
+def rolling_sharpe(
+    portfolio: pd.DataFrame,
+    window: int = ROLLING_WINDOW,
+    annual_factor: int = 252,
+) -> pd.Series:
+    """Calculate rolling Sharpe ratio from strategy daily returns."""
+    returns = portfolio["strategy_return"]
+    rolling_mean = returns.rolling(window).mean()
+    rolling_std = returns.rolling(window).std()
+    return (rolling_mean / rolling_std) * np.sqrt(annual_factor)
+
+
+def build_strategy_results(df: pd.DataFrame) -> dict[str, dict[str, pd.DataFrame | dict[str, str | int]]]:
+    """Build no-fee backtest results for Strategy A/B/C for rolling diagnostics."""
+    strategies = {
+        "Strategy_A": df["signal_a"],
+        "Strategy_B": df["signal_b"],
+        "Strategy_C": df["signal_c"],
+    }
+
+    results: dict[str, dict[str, pd.DataFrame | dict[str, str | int]]] = {}
+    for name, signals in strategies.items():
+        portfolio = run_backtest(df, signals, fee_rate=0.0)
+        results[f"{name}_no_fee"] = {
+            "portfolio": portfolio,
+            "metrics": calculate_metrics(portfolio),
+        }
+    return results
+
+
+def plot_rolling_sharpe(results: dict[str, dict[str, pd.DataFrame | dict[str, str | int]]]) -> None:
+    """Plot 12-month rolling Sharpe ratios for all three strategies."""
+    fig, ax = plt.subplots(figsize=(14, 5))
+    for name in ["Strategy_A", "Strategy_B", "Strategy_C"]:
+        portfolio = results[f"{name}_no_fee"]["portfolio"]
+        rolling_values = rolling_sharpe(portfolio)
+        ax.plot(portfolio["Date"], rolling_values, label=name, alpha=0.8)
+
+    ax.axhline(0, color="black", linestyle="--", alpha=0.5)
+    ax.set_title("Rolling 12-Month Sharpe Ratio")
+    ax.set_xlabel("Date")
+    ax.set_ylabel("Sharpe Ratio")
+    ax.legend()
+    save_and_close(fig, FIG_ROLLING_SHARPE)
+
+
+def print_overfitting_discussion() -> None:
+    """Print the overfitting risk discussion in Markdown format."""
+    overfitting_discussion = """
+## Overfitting Risk Discussion
+
+1. **In-sample only**: All analysis is performed on the full dataset without out-of-sample validation.
+   The results may be optimistic due to data snooping.
+
+2. **Threshold selection**: The +/-0.1 threshold for Strategy B was chosen based on visual inspection.
+   Sensitivity analysis shows whether results remain stable across nearby threshold settings.
+
+3. **Limited history**: The sample covers only a few years of trading days.
+   The strategy has not been tested across a full market cycle.
+
+4. **Survivorship bias**: HSI is a market-cap weighted index; constituent changes are not modeled.
+
+5. **Recommendation**: Forward-test the strategy on unseen future data before live deployment.
+"""
+    print("\n" + overfitting_discussion.strip())
+
+
+def main() -> None:
+    input_path = Path(INPUT_FILE)
+    if not input_path.exists():
+        raise FileNotFoundError(
+            f"Input file not found: {input_path.resolve()}. "
+            "Run task_002_feature_engineering.py first to generate hsi_features.csv."
+        )
+
+    configure_plot_style()
+    df = load_data(str(input_path))
+    validate_columns(df)
+    df = ensure_signals(df)
+
+    threshold_sensitivity_analysis(df)
+    lag_signal_analysis(df)
+    outlier_removal_analysis(df)
+
+    results = build_strategy_results(df)
+    plot_rolling_sharpe(results)
+    print_overfitting_discussion()
+
+
+if __name__ == "__main__":
+    main()
+apply_patch(auto_approved=true) exited 0 in 89ms:
+Success. Updated the following files:
+A C:\Coding\AI-factory-projects\quantitative-research-workflow\code\task_008_robustness.py
+file update:
+diff --git a/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_008_robustness.py b/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_008_robustness.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..017df2957b1ca118662a9166da069dba3e8a62f7
+--- /dev/null
++++ b/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_008_robustness.py
+@@ -0,0 +1,238 @@
++from pathlib import Path
++
++import matplotlib.pyplot as plt
++import numpy as np
++import pandas as pd
++from scipy.stats import mstats
++
++from task_007_backtest import (
++    FEE_RATE,
++    INPUT_FILE,
++    calculate_metrics,
++    configure_plot_style,
++    ensure_signals,
++    load_data,
++    run_backtest,
++    save_and_close,
++    validate_columns,
++)
++
++
++FIG_SENSITIVITY = "fig_14_sensitivity.png"
++FIG_ROLLING_SHARPE = "fig_15_rolling_sharpe.png"
++SENSITIVITY_THRESHOLDS = [0.0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3]
++ROBUSTNESS_THRESHOLD = 0.1
++ROLLING_WINDOW = 252
++
++
++def parse_percent(value: str) -> float:
++    """Convert a formatted percent string like '12.34%' to decimal."""
++    return float(value.strip("%")) / 100
++
++
++def parse_float(value: str) -> float:
++    """Convert a formatted numeric string to float."""
++    return float(value)
++
++
++def threshold_sensitivity_analysis(df: pd.DataFrame) -> pd.DataFrame:
++    """Run Strategy B threshold sensitivity analysis and save the chart."""
++    sensitivity_results: list[dict[str, float]] = []
++
++    for threshold in SENSITIVITY_THRESHOLDS:
++        signals = (df["sentiment_score"] > threshold).astype(int) - (
++            df["sentiment_score"] < -threshold
++        ).astype(int)
++        portfolio = run_backtest(df, signals, fee_rate=FEE_RATE)
++        metrics = calculate_metrics(portfolio)
++        sensitivity_results.append(
++            {
++                "threshold": threshold,
++                "sharpe": parse_float(str(metrics["Sharpe Ratio"])),
++                "annual_return": parse_percent(str(metrics["Annual Return"])),
++                "max_drawdown": parse_percent(str(metrics["Max Drawdown"])),
++            }
++        )
++
++    sensitivity_df = pd.DataFrame(sensitivity_results)
++    print("Threshold Sensitivity Analysis:")
++    print(sensitivity_df.to_string(index=False))
++
++    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
++    axes[0].plot(sensitivity_df["threshold"], sensitivity_df["sharpe"], "bo-")
++    axes[0].set_title("Sharpe vs Threshold")
++    axes[0].set_xlabel("Threshold")
++    axes[0].set_ylabel("Sharpe Ratio")
++
++    axes[1].plot(sensitivity_df["threshold"], sensitivity_df["annual_return"], "go-")
++    axes[1].set_title("Annual Return vs Threshold")
++    axes[1].set_xlabel("Threshold")
++    axes[1].set_ylabel("Annual Return")
++
++    axes[2].plot(sensitivity_df["threshold"], sensitivity_df["max_drawdown"], "ro-")
++    axes[2].set_title("Max Drawdown vs Threshold")
++    axes[2].set_xlabel("Threshold")
++    axes[2].set_ylabel("Max Drawdown")
++
++    save_and_close(fig, FIG_SENSITIVITY)
++    return sensitivity_df
++
++
++def lag_signal_analysis(df: pd.DataFrame) -> pd.DataFrame:
++    """Compare performance using current and lagged sentiment signals."""
++    lag_results: list[dict[str, str | int]] = []
++
++    for lag in [0, 1, 2, 3]:
++        score = df["sentiment_score"] if lag == 0 else df[f"sentiment_lag{lag}"]
++        signals = (score > ROBUSTNESS_THRESHOLD).astype(int) - (
++            score < -ROBUSTNESS_THRESHOLD
++        ).astype(int)
++        portfolio = run_backtest(df, signals, fee_rate=FEE_RATE)
++        metrics = calculate_metrics(portfolio)
++        lag_results.append({"lag": lag, **metrics})
++
++    lag_df = pd.DataFrame(lag_results)
++    print("\nLag Signal Analysis:")
++    print(
++        lag_df[["lag", "Sharpe Ratio", "Annual Return", "Max Drawdown"]].to_string(
++            index=False
++        )
++    )
++    return lag_df
++
++
++def outlier_removal_analysis(df: pd.DataFrame) -> pd.DataFrame:
++    """Winsorize extreme sentiment values and compare performance."""
++    winsorized_df = df.copy()
++    winsorized_df["sentiment_winsorized"] = mstats.winsorize(
++        df["sentiment_score"].fillna(0),
++        limits=[0.01, 0.01],
++    )
++
++    original_signals = (df["sentiment_score"] > ROBUSTNESS_THRESHOLD).astype(int) - (
++        df["sentiment_score"] < -ROBUSTNESS_THRESHOLD
++    ).astype(int)
++    winsorized_signals = (
++        winsorized_df["sentiment_winsorized"] > ROBUSTNESS_THRESHOLD
++    ).astype(int) - (
++        winsorized_df["sentiment_winsorized"] < -ROBUSTNESS_THRESHOLD
++    ).astype(int)
++
++    original_portfolio = run_backtest(df, original_signals, fee_rate=FEE_RATE)
++    winsorized_portfolio = run_backtest(df, winsorized_signals, fee_rate=FEE_RATE)
++
++    metrics_original = calculate_metrics(original_portfolio)
++    metrics_winsorized = calculate_metrics(winsorized_portfolio)
++
++    comparison_df = pd.DataFrame(
++        {
++            "Metric": ["Sharpe Ratio", "Annual Return", "Max Drawdown"],
++            "Original": [
++                metrics_original["Sharpe Ratio"],
++                metrics_original["Annual Return"],
++                metrics_original["Max Drawdown"],
++            ],
++            "Winsorized": [
++                metrics_winsorized["Sharpe Ratio"],
++                metrics_winsorized["Annual Return"],
++                metrics_winsorized["Max Drawdown"],
++            ],
++        }
++    )
++
++    print("\nOutlier Removal Analysis (Strategy B, with fee):")
++    print(comparison_df.to_string(index=False))
++    return comparison_df
++
++
++def rolling_sharpe(
++    portfolio: pd.DataFrame,
++    window: int = ROLLING_WINDOW,
++    annual_factor: int = 252,
++) -> pd.Series:
++    """Calculate rolling Sharpe ratio from strategy daily returns."""
++    returns = portfolio["strategy_return"]
++    rolling_mean = returns.rolling(window).mean()
++    rolling_std = returns.rolling(window).std()
++    return (rolling_mean / rolling_std) * np.sqrt(annual_factor)
++
++
++def build_strategy_results(df: pd.DataFrame) -> dict[str, dict[str, pd.DataFrame | dict[str, str | int]]]:
++    """Build no-fee backtest results for Strategy A/B/C for rolling diagnostics."""
++    strategies = {
++        "Strategy_A": df["signal_a"],
++        "Strategy_B": df["signal_b"],
++        "Strategy_C": df["signal_c"],
++    }
++
++    results: dict[str, dict[str, pd.DataFrame | dict[str, str | int]]] = {}
++    for name, signals in strategies.items():
++        portfolio = run_backtest(df, signals, fee_rate=0.0)
++        results[f"{name}_no_fee"] = {
++            "portfolio": portfolio,
++            "metrics": calculate_metrics(portfolio),
++        }
++    return results
++
++
++def plot_rolling_sharpe(results: dict[str, dict[str, pd.DataFrame | dict[str, str | int]]]) -> None:
++    """Plot 12-month rolling Sharpe ratios for all three strategies."""
++    fig, ax = plt.subplots(figsize=(14, 5))
++    for name in ["Strategy_A", "Strategy_B", "Strategy_C"]:
++        portfolio = results[f"{name}_no_fee"]["portfolio"]
++        rolling_values = rolling_sharpe(portfolio)
++        ax.plot(portfolio["Date"], rolling_values, label=name, alpha=0.8)
++
++    ax.axhline(0, color="black", linestyle="--", alpha=0.5)
++    ax.set_title("Rolling 12-Month Sharpe Ratio")
++    ax.set_xlabel("Date")
++    ax.set_ylabel("Sharpe Ratio")
++    ax.legend()
++    save_and_close(fig, FIG_ROLLING_SHARPE)
++
++
++def print_overfitting_discussion() -> None:
++    """Print the overfitting risk discussion in Markdown format."""
++    overfitting_discussion = """
++## Overfitting Risk Discussion
++
++1. **In-sample only**: All analysis is performed on the full dataset without out-of-sample validation.
++   The results may be optimistic due to data snooping.
++
++2. **Threshold selection**: The +/-0.1 threshold for Strategy B was chosen based on visual inspection.
++   Sensitivity analysis shows whether results remain stable across nearby threshold settings.
++
++3. **Limited history**: The sample covers only a few years of trading days.
++   The strategy has not been tested across a full market cycle.
++
++4. **Survivorship bias**: HSI is a market-cap weighted index; constituent changes are not modeled.
++
++5. **Recommendation**: Forward-test the strategy on unseen future data before live deployment.
++"""
++    print("\n" + overfitting_discussion.strip())
++
++
++def main() -> None:
++    input_path = Path(INPUT_FILE)
++    if not input_path.exists():
++        raise FileNotFoundError(
++            f"Input file not found: {input_path.resolve()}. "
++            "Run task_002_feature_engineering.py first to generate hsi_features.csv."
++        )
++
++    configure_plot_style()
++    df = load_data(str(input_path))
++    validate_columns(df)
++    df = ensure_signals(df)
++
++    threshold_sensitivity_analysis(df)
++    lag_signal_analysis(df)
++    outlier_removal_analysis(df)
++
++    results = build_strategy_results(df)
++    plot_rolling_sharpe(results)
++    print_overfitting_discussion()
++
++
++if __name__ == "__main__":
++    main()
+
+file update:
+diff --git a/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_008_robustness.py b/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_008_robustness.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..017df2957b1ca118662a9166da069dba3e8a62f7
+--- /dev/null
++++ b/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_008_robustness.py
+@@ -0,0 +1,238 @@
++from pathlib import Path
++
++import matplotlib.pyplot as plt
++import numpy as np
++import pandas as pd
++from scipy.stats import mstats
++
++from task_007_backtest import (
++    FEE_RATE,
++    INPUT_FILE,
++    calculate_metrics,
++    configure_plot_style,
++    ensure_signals,
++    load_data,
++    run_backtest,
++    save_and_close,
++    validate_columns,
++)
++
++
++FIG_SENSITIVITY = "fig_14_sensitivity.png"
++FIG_ROLLING_SHARPE = "fig_15_rolling_sharpe.png"
++SENSITIVITY_THRESHOLDS = [0.0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3]
++ROBUSTNESS_THRESHOLD = 0.1
++ROLLING_WINDOW = 252
++
++
++def parse_percent(value: str) -> float:
++    """Convert a formatted percent string like '12.34%' to decimal."""
++    return float(value.strip("%")) / 100
++
++
++def parse_float(value: str) -> float:
++    """Convert a formatted numeric string to float."""
++    return float(value)
++
++
++def threshold_sensitivity_analysis(df: pd.DataFrame) -> pd.DataFrame:
++    """Run Strategy B threshold sensitivity analysis and save the chart."""
++    sensitivity_results: list[dict[str, float]] = []
++
++    for threshold in SENSITIVITY_THRESHOLDS:
++        signals = (df["sentiment_score"] > threshold).astype(int) - (
++            df["sentiment_score"] < -threshold
++        ).astype(int)
++        portfolio = run_backtest(df, signals, fee_rate=FEE_RATE)
++        metrics = calculate_metrics(portfolio)
++        sensitivity_results.append(
++            {
++                "threshold": threshold,
++                "sharpe": parse_float(str(metrics["Sharpe Ratio"])),
++                "annual_return": parse_percent(str(metrics["Annual Return"])),
++                "max_drawdown": parse_percent(str(metrics["Max Drawdown"])),
++            }
++        )
++
++    sensitivity_df = pd.DataFrame(sensitivity_results)
++    print("Threshold Sensitivity Analysis:")
++    print(sensitivity_df.to_string(index=False))
++
++    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
++    axes[0].plot(sensitivity_df["threshold"], sensitivity_df["sharpe"], "bo-")
++    axes[0].set_title("Sharpe vs Threshold")
++    axes[0].set_xlabel("Threshold")
++    axes[0].set_ylabel("Sharpe Ratio")
++
++    axes[1].plot(sensitivity_df["threshold"], sensitivity_df["annual_return"], "go-")
++    axes[1].set_title("Annual Return vs Threshold")
++    axes[1].set_xlabel("Threshold")
++    axes[1].set_ylabel("Annual Return")
++
++    axes[2].plot(sensitivity_df["threshold"], sensitivity_df["max_drawdown"], "ro-")
++    axes[2].set_title("Max Drawdown vs Threshold")
++    axes[2].set_xlabel("Threshold")
++    axes[2].set_ylabel("Max Drawdown")
++
++    save_and_close(fig, FIG_SENSITIVITY)
++    return sensitivity_df
++
++
++def lag_signal_analysis(df: pd.DataFrame) -> pd.DataFrame:
++    """Compare performance using current and lagged sentiment signals."""
++    lag_results: list[dict[str, str | int]] = []
++
++    for lag in [0, 1, 2, 3]:
++        score = df["sentiment_score"] if lag == 0 else df[f"sentiment_lag{lag}"]
++        signals = (score > ROBUSTNESS_THRESHOLD).astype(int) - (
++            score < -ROBUSTNESS_THRESHOLD
++        ).astype(int)
++        portfolio = run_backtest(df, signals, fee_rate=FEE_RATE)
++        metrics = calculate_metrics(portfolio)
++        lag_results.append({"lag": lag, **metrics})
++
++    lag_df = pd.DataFrame(lag_results)
++    print("\nLag Signal Analysis:")
++    print(
++        lag_df[["lag", "Sharpe Ratio", "Annual Return", "Max Drawdown"]].to_string(
++            index=False
++        )
++    )
++    return lag_df
++
++
++def outlier_removal_analysis(df: pd.DataFrame) -> pd.DataFrame:
++    """Winsorize extreme sentiment values and compare performance."""
++    winsorized_df = df.copy()
++    winsorized_df["sentiment_winsorized"] = mstats.winsorize(
++        df["sentiment_score"].fillna(0),
++        limits=[0.01, 0.01],
++    )
++
++    original_signals = (df["sentiment_score"] > ROBUSTNESS_THRESHOLD).astype(int) - (
++        df["sentiment_score"] < -ROBUSTNESS_THRESHOLD
++    ).astype(int)
++    winsorized_signals = (
++        winsorized_df["sentiment_winsorized"] > ROBUSTNESS_THRESHOLD
++    ).astype(int) - (
++        winsorized_df["sentiment_winsorized"] < -ROBUSTNESS_THRESHOLD
++    ).astype(int)
++
++    original_portfolio = run_backtest(df, original_signals, fee_rate=FEE_RATE)
++    winsorized_portfolio = run_backtest(df, winsorized_signals, fee_rate=FEE_RATE)
++
++    metrics_original = calculate_metrics(original_portfolio)
++    metrics_winsorized = calculate_metrics(winsorized_portfolio)
++
++    comparison_df = pd.DataFrame(
++        {
++            "Metric": ["Sharpe Ratio", "Annual Return", "Max Drawdown"],
++            "Original": [
++                metrics_original["Sharpe Ratio"],
++                metrics_original["Annual Return"],
++                metrics_original["Max Drawdown"],
++            ],
++            "Winsorized": [
++                metrics_winsorized["Sharpe Ratio"],
++                metrics_winsorized["Annual Return"],
++                metrics_winsorized["Max Drawdown"],
++            ],
++        }
++    )
++
++    print("\nOutlier Removal Analysis (Strategy B, with fee):")
++    print(comparison_df.to_string(index=False))
++    return comparison_df
++
++
++def rolling_sharpe(
++    portfolio: pd.DataFrame,
++    window: int = ROLLING_WINDOW,
++    annual_factor: int = 252,
++) -> pd.Series:
++    """Calculate rolling Sharpe ratio from strategy daily returns."""
++    returns = portfolio["strategy_return"]
++    rolling_mean = returns.rolling(window).mean()
++    rolling_std = returns.rolling(window).std()
++    return (rolling_mean / rolling_std) * np.sqrt(annual_factor)
++
++
++def build_strategy_results(df: pd.DataFrame) -> dict[str, dict[str, pd.DataFrame | dict[str, str | int]]]:
++    """Build no-fee backtest results for Strategy A/B/C for rolling diagnostics."""
++    strategies = {
++        "Strategy_A": df["signal_a"],
++        "Strategy_B": df["signal_b"],
++        "Strategy_C": df["signal_c"],
++    }
++
++    results: dict[str, dict[str, pd.DataFrame | dict[str, str | int]]] = {}
++    for name, signals in strategies.items():
++        portfolio = run_backtest(df, signals, fee_rate=0.0)
++        results[f"{name}_no_fee"] = {
++            "portfolio": portfolio,
++            "metrics": calculate_metrics(portfolio),
++        }
++    return results
++
++
++def plot_rolling_sharpe(results: dict[str, dict[str, pd.DataFrame | dict[str, str | int]]]) -> None:
++    """Plot 12-month rolling Sharpe ratios for all three strategies."""
++    fig, ax = plt.subplots(figsize=(14, 5))
++    for name in ["Strategy_A", "Strategy_B", "Strategy_C"]:
++        portfolio = results[f"{name}_no_fee"]["portfolio"]
++        rolling_values = rolling_sharpe(portfolio)
++        ax.plot(portfolio["Date"], rolling_values, label=name, alpha=0.8)
++
++    ax.axhline(0, color="black", linestyle="--", alpha=0.5)
++    ax.set_title("Rolling 12-Month Sharpe Ratio")
++    ax.set_xlabel("Date")
++    ax.set_ylabel("Sharpe Ratio")
++    ax.legend()
++    save_and_close(fig, FIG_ROLLING_SHARPE)
++
++
++def print_overfitting_discussion() -> None:
++    """Print the overfitting risk discussion in Markdown format."""
++    overfitting_discussion = """
++## Overfitting Risk Discussion
++
++1. **In-sample only**: All analysis is performed on the full dataset without out-of-sample validation.
++   The results may be optimistic due to data snooping.
++
++2. **Threshold selection**: The +/-0.1 threshold for Strategy B was chosen based on visual inspection.
++   Sensitivity analysis shows whether results remain stable across nearby threshold settings.
++
++3. **Limited history**: The sample covers only a few years of trading days.
++   The strategy has not been tested across a full market cycle.
++
++4. **Survivorship bias**: HSI is a market-cap weighted index; constituent changes are not modeled.
++
++5. **Recommendation**: Forward-test the strategy on unseen future data before live deployment.
++"""
++    print("\n" + overfitting_discussion.strip())
++
++
++def main() -> None:
++    input_path = Path(INPUT_FILE)
++    if not input_path.exists():
++        raise FileNotFoundError(
++            f"Input file not found: {input_path.resolve()}. "
++            "Run task_002_feature_engineering.py first to generate hsi_features.csv."
++        )
++
++    configure_plot_style()
++    df = load_data(str(input_path))
++    validate_columns(df)
++    df = ensure_signals(df)
++
++    threshold_sensitivity_analysis(df)
++    lag_signal_analysis(df)
++    outlier_removal_analysis(df)
++
++    results = build_strategy_results(df)
++    plot_rolling_sharpe(results)
++    print_overfitting_discussion()
++
++
++if __name__ == "__main__":
++    main()
+
+codex
+脚本已写入。现在做静态校验，先检查语法和明显的类型/导入问题；由于本地还没有 `hsi_features.csv`，运行主流程大概率会被输入文件拦住。
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command 'Get-Content task_008_robustness.py' in C:\Coding\AI-factory-projects\quantitative-research-workflow\codeexec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command 'python -m py_compile task_008_robustness.py task_007_backtest.py task_006_strategy_design.py' in C:\Coding\AI-factory-projects\quantitative-research-workflow\code succeeded in 319ms:
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from scipy.stats import mstats
+
+from task_007_backtest import (
+    FEE_RATE,
+    INPUT_FILE,
+    calculate_metrics,
+    configure_plot_style,
+    ensure_signals,
+    load_data,
+    run_backtest,
+    save_and_close,
+    validate_columns,
+)
+
+
+ succeeded in 372ms:
+
+file update:
+diff --git a/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_008_robustness.py b/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_008_robustness.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..017df2957b1ca118662a9166da069dba3e8a62f7
+--- /dev/null
++++ b/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_008_robustness.py
+@@ -0,0 +1,238 @@
++from pathlib import Path
++
++import matplotlib.pyplot as plt
++import numpy as np
++import pandas as pd
++from scipy.stats import mstats
++
++from task_007_backtest import (
++    FEE_RATE,
++    INPUT_FILE,
++    calculate_metrics,
++    configure_plot_style,
++    ensure_signals,
++    load_data,
++    run_backtest,
++    save_and_close,
++    validate_columns,
++)
++
++
++FIG_SENSITIVITY = "fig_14_sensitivity.png"
++FIG_ROLLING_SHARPE = "fig_15_rolling_sharpe.png"
++SENSITIVITY_THRESHOLDS = [0.0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3]
++ROBUSTNESS_THRESHOLD = 0.1
++ROLLING_WINDOW = 252
++
++
++def parse_percent(value: str) -> float:
++    """Convert a formatted percent string like '12.34%' to decimal."""
++    return float(value.strip("%")) / 100
++
++
++def parse_float(value: str) -> float:
++    """Convert a formatted numeric string to float."""
++    return float(value)
++
++
++def threshold_sensitivity_analysis(df: pd.DataFrame) -> pd.DataFrame:
++    """Run Strategy B threshold sensitivity analysis and save the chart."""
++    sensitivity_results: list[dict[str, float]] = []
++
++    for threshold in SENSITIVITY_THRESHOLDS:
++        signals = (df["sentiment_score"] > threshold).astype(int) - (
++            df["sentiment_score"] < -threshold
++        ).astype(int)
++        portfolio = run_backtest(df, signals, fee_rate=FEE_RATE)
++        metrics = calculate_metrics(portfolio)
++        sensitivity_results.append(
++            {
++                "threshold": threshold,
++                "sharpe": parse_float(str(metrics["Sharpe Ratio"])),
++                "annual_return": parse_percent(str(metrics["Annual Return"])),
++                "max_drawdown": parse_percent(str(metrics["Max Drawdown"])),
++            }
++        )
++
++    sensitivity_df = pd.DataFrame(sensitivity_results)
++    print("Threshold Sensitivity Analysis:")
++    print(sensitivity_df.to_string(index=False))
++
++    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
++    axes[0].plot(sensitivity_df["threshold"], sensitivity_df["sharpe"], "bo-")
++    axes[0].set_title("Sharpe vs Threshold")
++    axes[0].set_xlabel("Threshold")
++    axes[0].set_ylabel("Sharpe Ratio")
++
++    axes[1].plot(sensitivity_df["threshold"], sensitivity_df["annual_return"], "go-")
++    axes[1].set_title("Annual Return vs Threshold")
++    axes[1].set_xlabel("Threshold")
++    axes[1].set_ylabel("Annual Return")
++
++    axes[2].plot(sensitivity_df["threshold"], sensitivity_df["max_drawdown"], "ro-")
++    axes[2].set_title("Max Drawdown vs Threshold")
++    axes[2].set_xlabel("Threshold")
++    axes[2].set_ylabel("Max Drawdown")
++
++    save_and_close(fig, FIG_SENSITIVITY)
++    return sensitivity_df
++
++
++def lag_signal_analysis(df: pd.DataFrame) -> pd.DataFrame:
++    """Compare performance using current and lagged sentiment signals."""
++    lag_results: list[dict[str, str | int]] = []
++
++    for lag in [0, 1, 2, 3]:
++        score = df["sentiment_score"] if lag == 0 else df[f"sentiment_lag{lag}"]
++        signals = (score > ROBUSTNESS_THRESHOLD).astype(int) - (
++            score < -ROBUSTNESS_THRESHOLD
++        ).astype(int)
++        portfolio = run_backtest(df, signals, fee_rate=FEE_RATE)
++        metrics = calculate_metrics(portfolio)
++        lag_results.append({"lag": lag, **metrics})
++
++    lag_df = pd.DataFrame(lag_results)
++    print("\nLag Signal Analysis:")
++    print(
++        lag_df[["lag", "Sharpe Ratio", "Annual Return", "Max Drawdown"]].to_string(
++            index=False
++        )
++    )
++    return lag_df
++
++
++def outlier_removal_analysis(df: pd.DataFrame) -> pd.DataFrame:
++    """Winsorize extreme sentiment values and compare performance."""
++    winsorized_df = df.copy()
++    winsorized_df["sentiment_winsorized"] = mstats.winsorize(
++        df["sentiment_score"].fillna(0),
++        limits=[0.01, 0.01],
++    )
++
++    original_signals = (df["sentiment_score"] > ROBUSTNESS_THRESHOLD).astype(int) - (
++        df["sentiment_score"] < -ROBUSTNESS_THRESHOLD
++    ).astype(int)
++    winsorized_signals = (
++        winsorized_df["sentiment_winsorized"] > ROBUSTNESS_THRESHOLD
++    ).astype(int) - (
++        winsorized_df["sentiment_winsorized"] < -ROBUSTNESS_THRESHOLD
++    ).astype(int)
++
++    original_portfolio = run_backtest(df, original_signals, fee_rate=FEE_RATE)
++    winsorized_portfolio = run_backtest(df, winsorized_signals, fee_rate=FEE_RATE)
++
++    metrics_original = calculate_metrics(original_portfolio)
++    metrics_winsorized = calculate_metrics(winsorized_portfolio)
++
++    comparison_df = pd.DataFrame(
++        {
++            "Metric": ["Sharpe Ratio", "Annual Return", "Max Drawdown"],
++            "Original": [
++                metrics_original["Sharpe Ratio"],
++                metrics_original["Annual Return"],
++                metrics_original["Max Drawdown"],
++            ],
++            "Winsorized": [
++                metrics_winsorized["Sharpe Ratio"],
++                metrics_winsorized["Annual Return"],
++                metrics_winsorized["Max Drawdown"],
++            ],
++        }
++    )
++
++    print("\nOutlier Removal Analysis (Strategy B, with fee):")
++    print(comparison_df.to_string(index=False))
++    return comparison_df
++
++
++def rolling_sharpe(
++    portfolio: pd.DataFrame,
++    window: int = ROLLING_WINDOW,
++    annual_factor: int = 252,
++) -> pd.Series:
++    """Calculate rolling Sharpe ratio from strategy daily returns."""
++    returns = portfolio["strategy_return"]
++    rolling_mean = returns.rolling(window).mean()
++    rolling_std = returns.rolling(window).std()
++    return (rolling_mean / rolling_std) * np.sqrt(annual_factor)
++
++
++def build_strategy_results(df: pd.DataFrame) -> dict[str, dict[str, pd.DataFrame | dict[str, str | int]]]:
++    """Build no-fee backtest results for Strategy A/B/C for rolling diagnostics."""
++    strategies = {
++        "Strategy_A": df["signal_a"],
++        "Strategy_B": df["signal_b"],
++        "Strategy_C": df["signal_c"],
++    }
++
++    results: dict[str, dict[str, pd.DataFrame | dict[str, str | int]]] = {}
++    for name, signals in strategies.items():
++        portfolio = run_backtest(df, signals, fee_rate=0.0)
++        results[f"{name}_no_fee"] = {
++            "portfolio": portfolio,
++            "metrics": calculate_metrics(portfolio),
++        }
++    return results
++
++
++def plot_rolling_sharpe(results: dict[str, dict[str, pd.DataFrame | dict[str, str | int]]]) -> None:
++    """Plot 12-month rolling Sharpe ratios for all three strategies."""
++    fig, ax = plt.subplots(figsize=(14, 5))
++    for name in ["Strategy_A", "Strategy_B", "Strategy_C"]:
++        portfolio = results[f"{name}_no_fee"]["portfolio"]
++        rolling_values = rolling_sharpe(portfolio)
++        ax.plot(portfolio["Date"], rolling_values, label=name, alpha=0.8)
++
++    ax.axhline(0, color="black", linestyle="--", alpha=0.5)
++    ax.set_title("Rolling 12-Month Sharpe Ratio")
++    ax.set_xlabel("Date")
++    ax.set_ylabel("Sharpe Ratio")
++    ax.legend()
++    save_and_close(fig, FIG_ROLLING_SHARPE)
++
++
++def print_overfitting_discussion() -> None:
++    """Print the overfitting risk discussion in Markdown format."""
++    overfitting_discussion = """
++## Overfitting Risk Discussion
++
++1. **In-sample only**: All analysis is performed on the full dataset without out-of-sample validation.
++   The results may be optimistic due to data snooping.
++
++2. **Threshold selection**: The +/-0.1 threshold for Strategy B was chosen based on visual inspection.
++   Sensitivity analysis shows whether results remain stable across nearby threshold settings.
++
++3. **Limited history**: The sample covers only a few years of trading days.
++   The strategy has not been tested across a full market cycle.
++
++4. **Survivorship bias**: HSI is a market-cap weighted index; constituent changes are not modeled.
++
++5. **Recommendation**: Forward-test the strategy on unseen future data before live deployment.
++"""
++    print("\n" + overfitting_discussion.strip())
++
++
++def main() -> None:
++    input_path = Path(INPUT_FILE)
++    if not input_path.exists():
++        raise FileNotFoundError(
++            f"Input file not found: {input_path.resolve()}. "
++            "Run task_002_feature_engineering.py first to generate hsi_features.csv."
++        )
++
++    configure_plot_style()
++    df = load_data(str(input_path))
++    validate_columns(df)
++    df = ensure_signals(df)
++
++    threshold_sensitivity_analysis(df)
++    lag_signal_analysis(df)
++    outlier_removal_analysis(df)
++
++    results = build_strategy_results(df)
++    plot_rolling_sharpe(results)
++    print_overfitting_discussion()
++
++
++if __name__ == "__main__":
++    main()
+
+codex
+语法已过。我再做一次轻量导入校验，确认 `scipy` 和跨文件导入在当前环境里能正常解析。
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "python -c \"import task_008_robustness; print('import ok')\"" in C:\Coding\AI-factory-projects\quantitative-research-workflow\code succeeded in 1.51s:
+import ok
+file update:
+diff --git a/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_008_robustness.py b/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_008_robustness.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..017df2957b1ca118662a9166da069dba3e8a62f7
+--- /dev/null
++++ b/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_008_robustness.py
+@@ -0,0 +1,238 @@
++from pathlib import Path
++
++import matplotlib.pyplot as plt
++import numpy as np
++import pandas as pd
++from scipy.stats import mstats
++
++from task_007_backtest import (
++    FEE_RATE,
++    INPUT_FILE,
++    calculate_metrics,
++    configure_plot_style,
++    ensure_signals,
++    load_data,
++    run_backtest,
++    save_and_close,
++    validate_columns,
++)
++
++
++FIG_SENSITIVITY = "fig_14_sensitivity.png"
++FIG_ROLLING_SHARPE = "fig_15_rolling_sharpe.png"
++SENSITIVITY_THRESHOLDS = [0.0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3]
++ROBUSTNESS_THRESHOLD = 0.1
++ROLLING_WINDOW = 252
++
++
++def parse_percent(value: str) -> float:
++    """Convert a formatted percent string like '12.34%' to decimal."""
++    return float(value.strip("%")) / 100
++
++
++def parse_float(value: str) -> float:
++    """Convert a formatted numeric string to float."""
++    return float(value)
++
++
++def threshold_sensitivity_analysis(df: pd.DataFrame) -> pd.DataFrame:
++    """Run Strategy B threshold sensitivity analysis and save the chart."""
++    sensitivity_results: list[dict[str, float]] = []
++
++    for threshold in SENSITIVITY_THRESHOLDS:
++        signals = (df["sentiment_score"] > threshold).astype(int) - (
++            df["sentiment_score"] < -threshold
++        ).astype(int)
++        portfolio = run_backtest(df, signals, fee_rate=FEE_RATE)
++        metrics = calculate_metrics(portfolio)
++        sensitivity_results.append(
++            {
++                "threshold": threshold,
++                "sharpe": parse_float(str(metrics["Sharpe Ratio"])),
++                "annual_return": parse_percent(str(metrics["Annual Return"])),
++                "max_drawdown": parse_percent(str(metrics["Max Drawdown"])),
++            }
++        )
++
++    sensitivity_df = pd.DataFrame(sensitivity_results)
++    print("Threshold Sensitivity Analysis:")
++    print(sensitivity_df.to_string(index=False))
++
++    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
++    axes[0].plot(sensitivity_df["threshold"], sensitivity_df["sharpe"], "bo-")
++    axes[0].set_title("Sharpe vs Threshold")
++    axes[0].set_xlabel("Threshold")
++    axes[0].set_ylabel("Sharpe Ratio")
++
++    axes[1].plot(sensitivity_df["threshold"], sensitivity_df["annual_return"], "go-")
++    axes[1].set_title("Annual Return vs Threshold")
++    axes[1].set_xlabel("Threshold")
++    axes[1].set_ylabel("Annual Return")
++
++    axes[2].plot(sensitivity_df["threshold"], sensitivity_df["max_drawdown"], "ro-")
++    axes[2].set_title("Max Drawdown vs Threshold")
++    axes[2].set_xlabel("Threshold")
++    axes[2].set_ylabel("Max Drawdown")
++
++    save_and_close(fig, FIG_SENSITIVITY)
++    return sensitivity_df
++
++
++def lag_signal_analysis(df: pd.DataFrame) -> pd.DataFrame:
++    """Compare performance using current and lagged sentiment signals."""
++    lag_results: list[dict[str, str | int]] = []
++
++    for lag in [0, 1, 2, 3]:
++        score = df["sentiment_score"] if lag == 0 else df[f"sentiment_lag{lag}"]
++        signals = (score > ROBUSTNESS_THRESHOLD).astype(int) - (
++            score < -ROBUSTNESS_THRESHOLD
++        ).astype(int)
++        portfolio = run_backtest(df, signals, fee_rate=FEE_RATE)
++        metrics = calculate_metrics(portfolio)
++        lag_results.append({"lag": lag, **metrics})
++
++    lag_df = pd.DataFrame(lag_results)
++    print("\nLag Signal Analysis:")
++    print(
++        lag_df[["lag", "Sharpe Ratio", "Annual Return", "Max Drawdown"]].to_string(
++            index=False
++        )
++    )
++    return lag_df
++
++
++def outlier_removal_analysis(df: pd.DataFrame) -> pd.DataFrame:
++    """Winsorize extreme sentiment values and compare performance."""
++    winsorized_df = df.copy()
++    winsorized_df["sentiment_winsorized"] = mstats.winsorize(
++        df["sentiment_score"].fillna(0),
++        limits=[0.01, 0.01],
++    )
++
++    original_signals = (df["sentiment_score"] > ROBUSTNESS_THRESHOLD).astype(int) - (
++        df["sentiment_score"] < -ROBUSTNESS_THRESHOLD
++    ).astype(int)
++    winsorized_signals = (
++        winsorized_df["sentiment_winsorized"] > ROBUSTNESS_THRESHOLD
++    ).astype(int) - (
++        winsorized_df["sentiment_winsorized"] < -ROBUSTNESS_THRESHOLD
++    ).astype(int)
++
++    original_portfolio = run_backtest(df, original_signals, fee_rate=FEE_RATE)
++    winsorized_portfolio = run_backtest(df, winsorized_signals, fee_rate=FEE_RATE)
++
++    metrics_original = calculate_metrics(original_portfolio)
++    metrics_winsorized = calculate_metrics(winsorized_portfolio)
++
++    comparison_df = pd.DataFrame(
++        {
++            "Metric": ["Sharpe Ratio", "Annual Return", "Max Drawdown"],
++            "Original": [
++                metrics_original["Sharpe Ratio"],
++                metrics_original["Annual Return"],
++                metrics_original["Max Drawdown"],
++            ],
++            "Winsorized": [
++                metrics_winsorized["Sharpe Ratio"],
++                metrics_winsorized["Annual Return"],
++                metrics_winsorized["Max Drawdown"],
++            ],
++        }
++    )
++
++    print("\nOutlier Removal Analysis (Strategy B, with fee):")
++    print(comparison_df.to_string(index=False))
++    return comparison_df
++
++
++def rolling_sharpe(
++    portfolio: pd.DataFrame,
++    window: int = ROLLING_WINDOW,
++    annual_factor: int = 252,
++) -> pd.Series:
++    """Calculate rolling Sharpe ratio from strategy daily returns."""
++    returns = portfolio["strategy_return"]
++    rolling_mean = returns.rolling(window).mean()
++    rolling_std = returns.rolling(window).std()
++    return (rolling_mean / rolling_std) * np.sqrt(annual_factor)
++
++
++def build_strategy_results(df: pd.DataFrame) -> dict[str, dict[str, pd.DataFrame | dict[str, str | int]]]:
++    """Build no-fee backtest results for Strategy A/B/C for rolling diagnostics."""
++    strategies = {
++        "Strategy_A": df["signal_a"],
++        "Strategy_B": df["signal_b"],
++        "Strategy_C": df["signal_c"],
++    }
++
++    results: dict[str, dict[str, pd.DataFrame | dict[str, str | int]]] = {}
++    for name, signals in strategies.items():
++        portfolio = run_backtest(df, signals, fee_rate=0.0)
++        results[f"{name}_no_fee"] = {
++            "portfolio": portfolio,
++            "metrics": calculate_metrics(portfolio),
++        }
++    return results
++
++
++def plot_rolling_sharpe(results: dict[str, dict[str, pd.DataFrame | dict[str, str | int]]]) -> None:
++    """Plot 12-month rolling Sharpe ratios for all three strategies."""
++    fig, ax = plt.subplots(figsize=(14, 5))
++    for name in ["Strategy_A", "Strategy_B", "Strategy_C"]:
++        portfolio = results[f"{name}_no_fee"]["portfolio"]
++        rolling_values = rolling_sharpe(portfolio)
++        ax.plot(portfolio["Date"], rolling_values, label=name, alpha=0.8)
++
++    ax.axhline(0, color="black", linestyle="--", alpha=0.5)
++    ax.set_title("Rolling 12-Month Sharpe Ratio")
++    ax.set_xlabel("Date")
++    ax.set_ylabel("Sharpe Ratio")
++    ax.legend()
++    save_and_close(fig, FIG_ROLLING_SHARPE)
++
++
++def print_overfitting_discussion() -> None:
++    """Print the overfitting risk discussion in Markdown format."""
++    overfitting_discussion = """
++## Overfitting Risk Discussion
++
++1. **In-sample only**: All analysis is performed on the full dataset without out-of-sample validation.
++   The results may be optimistic due to data snooping.
++
++2. **Threshold selection**: The +/-0.1 threshold for Strategy B was chosen based on visual inspection.
++   Sensitivity analysis shows whether results remain stable across nearby threshold settings.
++
++3. **Limited history**: The sample covers only a few years of trading days.
++   The strategy has not been tested across a full market cycle.
++
++4. **Survivorship bias**: HSI is a market-cap weighted index; constituent changes are not modeled.
++
++5. **Recommendation**: Forward-test the strategy on unseen future data before live deployment.
++"""
++    print("\n" + overfitting_discussion.strip())
++
++
++def main() -> None:
++    input_path = Path(INPUT_FILE)
++    if not input_path.exists():
++        raise FileNotFoundError(
++            f"Input file not found: {input_path.resolve()}. "
++            "Run task_002_feature_engineering.py first to generate hsi_features.csv."
++        )
++
++    configure_plot_style()
++    df = load_data(str(input_path))
++    validate_columns(df)
++    df = ensure_signals(df)
++
++    threshold_sensitivity_analysis(df)
++    lag_signal_analysis(df)
++    outlier_removal_analysis(df)
++
++    results = build_strategy_results(df)
++    plot_rolling_sharpe(results)
++    print_overfitting_discussion()
++
++
++if __name__ == "__main__":
++    main()
+
+codex
+已新增 [task_008_robustness.py](/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_008_robustness.py)，实现了四块稳健性检验：Strategy B 的 7 档阈值敏感性分析、`lag0/1/2/3` 信号对比、1% Winsorize 去极值前后对比，以及 Strategy A/B/C 的 12 个月滚动 Sharpe 图。脚本直接复用了 [task_007_backtest.py](/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_007_backtest.py) 里的 `run_backtest`、`calculate_metrics`、数据加载和信号补全逻辑，输出图文件为 `fig_14_sensitivity.png` 和 `fig_15_rolling_sharpe.png`，并按要求打印 Markdown 格式的过拟合风险讨论。
+
+已做验证：`python -m py_compile task_008_robustness.py task_007_backtest.py task_006_strategy_design.py` 和 `python -c "import task_008_robustness"` 均通过。主流程没有实际跑完，因为当前工作目录下缺少 `hsi_features.csv`；把 Task 002 的输出放到 `code/` 后，执行 `python task_008_robustness.py` 即可。
+file update:
+diff --git a/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_008_robustness.py b/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_008_robustness.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..017df2957b1ca118662a9166da069dba3e8a62f7
+--- /dev/null
++++ b/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_008_robustness.py
+@@ -0,0 +1,238 @@
++from pathlib import Path
++
++import matplotlib.pyplot as plt
++import numpy as np
++import pandas as pd
++from scipy.stats import mstats
++
++from task_007_backtest import (
++    FEE_RATE,
++    INPUT_FILE,
++    calculate_metrics,
++    configure_plot_style,
++    ensure_signals,
++    load_data,
++    run_backtest,
++    save_and_close,
++    validate_columns,
++)
++
++
++FIG_SENSITIVITY = "fig_14_sensitivity.png"
++FIG_ROLLING_SHARPE = "fig_15_rolling_sharpe.png"
++SENSITIVITY_THRESHOLDS = [0.0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3]
++ROBUSTNESS_THRESHOLD = 0.1
++ROLLING_WINDOW = 252
++
++
++def parse_percent(value: str) -> float:
++    """Convert a formatted percent string like '12.34%' to decimal."""
++    return float(value.strip("%")) / 100
++
++
++def parse_float(value: str) -> float:
++    """Convert a formatted numeric string to float."""
++    return float(value)
++
++
++def threshold_sensitivity_analysis(df: pd.DataFrame) -> pd.DataFrame:
++    """Run Strategy B threshold sensitivity analysis and save the chart."""
++    sensitivity_results: list[dict[str, float]] = []
++
++    for threshold in SENSITIVITY_THRESHOLDS:
++        signals = (df["sentiment_score"] > threshold).astype(int) - (
++            df["sentiment_score"] < -threshold
++        ).astype(int)
++        portfolio = run_backtest(df, signals, fee_rate=FEE_RATE)
++        metrics = calculate_metrics(portfolio)
++        sensitivity_results.append(
++            {
++                "threshold": threshold,
++                "sharpe": parse_float(str(metrics["Sharpe Ratio"])),
++                "annual_return": parse_percent(str(metrics["Annual Return"])),
++                "max_drawdown": parse_percent(str(metrics["Max Drawdown"])),
++            }
++        )
++
++    sensitivity_df = pd.DataFrame(sensitivity_results)
++    print("Threshold Sensitivity Analysis:")
++    print(sensitivity_df.to_string(index=False))
++
++    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
++    axes[0].plot(sensitivity_df["threshold"], sensitivity_df["sharpe"], "bo-")
++    axes[0].set_title("Sharpe vs Threshold")
++    axes[0].set_xlabel("Threshold")
++    axes[0].set_ylabel("Sharpe Ratio")
++
++    axes[1].plot(sensitivity_df["threshold"], sensitivity_df["annual_return"], "go-")
++    axes[1].set_title("Annual Return vs Threshold")
++    axes[1].set_xlabel("Threshold")
++    axes[1].set_ylabel("Annual Return")
++
++    axes[2].plot(sensitivity_df["threshold"], sensitivity_df["max_drawdown"], "ro-")
++    axes[2].set_title("Max Drawdown vs Threshold")
++    axes[2].set_xlabel("Threshold")
++    axes[2].set_ylabel("Max Drawdown")
++
++    save_and_close(fig, FIG_SENSITIVITY)
++    return sensitivity_df
++
++
++def lag_signal_analysis(df: pd.DataFrame) -> pd.DataFrame:
++    """Compare performance using current and lagged sentiment signals."""
++    lag_results: list[dict[str, str | int]] = []
++
++    for lag in [0, 1, 2, 3]:
++        score = df["sentiment_score"] if lag == 0 else df[f"sentiment_lag{lag}"]
++        signals = (score > ROBUSTNESS_THRESHOLD).astype(int) - (
++            score < -ROBUSTNESS_THRESHOLD
++        ).astype(int)
++        portfolio = run_backtest(df, signals, fee_rate=FEE_RATE)
++        metrics = calculate_metrics(portfolio)
++        lag_results.append({"lag": lag, **metrics})
++
++    lag_df = pd.DataFrame(lag_results)
++    print("\nLag Signal Analysis:")
++    print(
++        lag_df[["lag", "Sharpe Ratio", "Annual Return", "Max Drawdown"]].to_string(
++            index=False
++        )
++    )
++    return lag_df
++
++
++def outlier_removal_analysis(df: pd.DataFrame) -> pd.DataFrame:
++    """Winsorize extreme sentiment values and compare performance."""
++    winsorized_df = df.copy()
++    winsorized_df["sentiment_winsorized"] = mstats.winsorize(
++        df["sentiment_score"].fillna(0),
++        limits=[0.01, 0.01],
++    )
++
++    original_signals = (df["sentiment_score"] > ROBUSTNESS_THRESHOLD).astype(int) - (
++        df["sentiment_score"] < -ROBUSTNESS_THRESHOLD
++    ).astype(int)
++    winsorized_signals = (
++        winsorized_df["sentiment_winsorized"] > ROBUSTNESS_THRESHOLD
++    ).astype(int) - (
++        winsorized_df["sentiment_winsorized"] < -ROBUSTNESS_THRESHOLD
++    ).astype(int)
++
++    original_portfolio = run_backtest(df, original_signals, fee_rate=FEE_RATE)
++    winsorized_portfolio = run_backtest(df, winsorized_signals, fee_rate=FEE_RATE)
++
++    metrics_original = calculate_metrics(original_portfolio)
++    metrics_winsorized = calculate_metrics(winsorized_portfolio)
++
++    comparison_df = pd.DataFrame(
++        {
++            "Metric": ["Sharpe Ratio", "Annual Return", "Max Drawdown"],
++            "Original": [
++                metrics_original["Sharpe Ratio"],
++                metrics_original["Annual Return"],
++                metrics_original["Max Drawdown"],
++            ],
++            "Winsorized": [
++                metrics_winsorized["Sharpe Ratio"],
++                metrics_winsorized["Annual Return"],
++                metrics_winsorized["Max Drawdown"],
++            ],
++        }
++    )
++
++    print("\nOutlier Removal Analysis (Strategy B, with fee):")
++    print(comparison_df.to_string(index=False))
++    return comparison_df
++
++
++def rolling_sharpe(
++    portfolio: pd.DataFrame,
++    window: int = ROLLING_WINDOW,
++    annual_factor: int = 252,
++) -> pd.Series:
++    """Calculate rolling Sharpe ratio from strategy daily returns."""
++    returns = portfolio["strategy_return"]
++    rolling_mean = returns.rolling(window).mean()
++    rolling_std = returns.rolling(window).std()
++    return (rolling_mean / rolling_std) * np.sqrt(annual_factor)
++
++
++def build_strategy_results(df: pd.DataFrame) -> dict[str, dict[str, pd.DataFrame | dict[str, str | int]]]:
++    """Build no-fee backtest results for Strategy A/B/C for rolling diagnostics."""
++    strategies = {
++        "Strategy_A": df["signal_a"],
++        "Strategy_B": df["signal_b"],
++        "Strategy_C": df["signal_c"],
++    }
++
++    results: dict[str, dict[str, pd.DataFrame | dict[str, str | int]]] = {}
++    for name, signals in strategies.items():
++        portfolio = run_backtest(df, signals, fee_rate=0.0)
++        results[f"{name}_no_fee"] = {
++            "portfolio": portfolio,
++            "metrics": calculate_metrics(portfolio),
++        }
++    return results
++
++
++def plot_rolling_sharpe(results: dict[str, dict[str, pd.DataFrame | dict[str, str | int]]]) -> None:
++    """Plot 12-month rolling Sharpe ratios for all three strategies."""
++    fig, ax = plt.subplots(figsize=(14, 5))
++    for name in ["Strategy_A", "Strategy_B", "Strategy_C"]:
++        portfolio = results[f"{name}_no_fee"]["portfolio"]
++        rolling_values = rolling_sharpe(portfolio)
++        ax.plot(portfolio["Date"], rolling_values, label=name, alpha=0.8)
++
++    ax.axhline(0, color="black", linestyle="--", alpha=0.5)
++    ax.set_title("Rolling 12-Month Sharpe Ratio")
++    ax.set_xlabel("Date")
++    ax.set_ylabel("Sharpe Ratio")
++    ax.legend()
++    save_and_close(fig, FIG_ROLLING_SHARPE)
++
++
++def print_overfitting_discussion() -> None:
++    """Print the overfitting risk discussion in Markdown format."""
++    overfitting_discussion = """
++## Overfitting Risk Discussion
++
++1. **In-sample only**: All analysis is performed on the full dataset without out-of-sample validation.
++   The results may be optimistic due to data snooping.
++
++2. **Threshold selection**: The +/-0.1 threshold for Strategy B was chosen based on visual inspection.
++   Sensitivity analysis shows whether results remain stable across nearby threshold settings.
++
++3. **Limited history**: The sample covers only a few years of trading days.
++   The strategy has not been tested across a full market cycle.
++
++4. **Survivorship bias**: HSI is a market-cap weighted index; constituent changes are not modeled.
++
++5. **Recommendation**: Forward-test the strategy on unseen future data before live deployment.
++"""
++    print("\n" + overfitting_discussion.strip())
++
++
++def main() -> None:
++    input_path = Path(INPUT_FILE)
++    if not input_path.exists():
++        raise FileNotFoundError(
++            f"Input file not found: {input_path.resolve()}. "
++            "Run task_002_feature_engineering.py first to generate hsi_features.csv."
++        )
++
++    configure_plot_style()
++    df = load_data(str(input_path))
++    validate_columns(df)
++    df = ensure_signals(df)
++
++    threshold_sensitivity_analysis(df)
++    lag_signal_analysis(df)
++    outlier_removal_analysis(df)
++
++    results = build_strategy_results(df)
++    plot_rolling_sharpe(results)
++    print_overfitting_discussion()
++
++
++if __name__ == "__main__":
++    main()
+
+tokens used
+16,276
+已新增 [task_008_robustness.py](/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_008_robustness.py)，实现了四块稳健性检验：Strategy B 的 7 档阈值敏感性分析、`lag0/1/2/3` 信号对比、1% Winsorize 去极值前后对比，以及 Strategy A/B/C 的 12 个月滚动 Sharpe 图。脚本直接复用了 [task_007_backtest.py](/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_007_backtest.py) 里的 `run_backtest`、`calculate_metrics`、数据加载和信号补全逻辑，输出图文件为 `fig_14_sensitivity.png` 和 `fig_15_rolling_sharpe.png`，并按要求打印 Markdown 格式的过拟合风险讨论。
+
+已做验证：`python -m py_compile task_008_robustness.py task_007_backtest.py task_006_strategy_design.py` 和 `python -c "import task_008_robustness"` 均通过。主流程没有实际跑完，因为当前工作目录下缺少 `hsi_features.csv`；把 Task 002 的输出放到 `code/` 后，执行 `python task_008_robustness.py` 即可。

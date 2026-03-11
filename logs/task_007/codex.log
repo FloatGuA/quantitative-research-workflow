@@ -1,0 +1,2124 @@
+# Codex Log: Task 007 - Backtest Engine
+
+## Prompt
+
+# Task 007 — 回测引擎
+
+## 目标
+实现矢量化回测引擎，对三种策略运行无手续费和有手续费两个版本，计算全套绩效指标，生成可视化报告。
+
+## 工作目录
+`code/`
+
+## 依赖
+- `hsi_features.csv`（Task 002 输出）
+- Task 006 策略信号逻辑（需在本文件中重新实现或 import）
+
+## 输出文件
+- `task_007_backtest.py` — 回测引擎模块
+
+## 详细要求
+
+### 1. 回测引擎核心函数
+
+```python
+def run_backtest(df, signals, fee_rate=0.0):
+    """
+    矢量化回测引擎
+
+    Parameters:
+    -----------
+    df : DataFrame，含 return_open 列（次日收益率）
+    signals : Series，值为 1（long）、-1（short）、0（hold）
+    fee_rate : float，单边手续费率（默认 0，含手续费版传 0.001）
+
+    Returns:
+    --------
+    portfolio : DataFrame，含 daily_return、cum_return、drawdown 等列
+    metrics : dict，绩效指标
+    """
+    portfolio = df[['Date', 'return_open']].copy()
+    portfolio['signal'] = signals.values
+
+    # 策略日收益：信号方向 × 次日收益率
+    # 注意：信号在 t 日收盘后确定，t+1 日开盘建仓
+    portfolio['strategy_return'] = portfolio['signal'] * portfolio['return_open']
+
+    # 手续费：当信号发生变化（换仓）时触发单边手续费
+    if fee_rate > 0:
+        position_change = portfolio['signal'].diff().abs()
+        # 换仓成本：仓位变化量 × 手续费（做多做空都收）
+        portfolio['fee'] = position_change * fee_rate
+        portfolio['strategy_return'] = portfolio['strategy_return'] - portfolio['fee']
+    else:
+        portfolio['fee'] = 0.0
+
+    # 累计收益
+    portfolio['cum_return'] = (1 + portfolio['strategy_return']).cumprod() - 1
+
+    # 最大回撤
+    cum_value = (1 + portfolio['strategy_return']).cumprod()
+    rolling_max = cum_value.expanding().max()
+    portfolio['drawdown'] = (cum_value - rolling_max) / rolling_max
+
+    return portfolio
+```
+
+### 2. 绩效指标计算
+
+```python
+def calculate_metrics(portfolio, annual_factor=252):
+    """计算完整绩效指标"""
+    returns = portfolio['strategy_return'].dropna()
+
+    # 年化收益
+    total_return = (1 + returns).prod() - 1
+    n_years = len(returns) / annual_factor
+    annual_return = (1 + total_return) ** (1 / n_years) - 1
+
+    # Sharpe Ratio（假设无风险利率为 0）
+    annual_vol = returns.std() * np.sqrt(annual_factor)
+    sharpe = annual_return / annual_vol if annual_vol > 0 else 0
+
+    # 最大回撤
+    max_drawdown = portfolio['drawdown'].min()
+
+    # 胜率
+    win_rate = (returns > 0).sum() / (returns != 0).sum() if (returns != 0).sum() > 0 else 0
+
+    # 手续费总成本
+    total_fee = portfolio['fee'].sum()
+
+    metrics = {
+        'Total Return': f"{total_return:.2%}",
+        'Annual Return': f"{annual_return:.2%}",
+        'Annual Volatility': f"{annual_vol:.2%}",
+        'Sharpe Ratio': f"{sharpe:.3f}",
+        'Max Drawdown': f"{max_drawdown:.2%}",
+        'Win Rate': f"{win_rate:.2%}",
+        'Total Fee Cost': f"{total_fee:.4f}",
+        'Num Trades': int(portfolio['signal'].diff().abs().sum())
+    }
+    return metrics
+```
+
+### 3. 基准收益（买入持有）
+
+```python
+def benchmark_buyhold(df):
+    """买入持有基准：close-to-close return"""
+    bm = df[['Date', 'return_close']].copy()
+    bm['cum_return'] = (1 + bm['return_close']).cumprod() - 1
+    return bm
+```
+
+### 4. 运行所有回测并打印比较表
+
+```python
+def run_all_backtests(df):
+    strategies = {
+        'Strategy_A': df['signal_a'],
+        'Strategy_B': df['signal_b'],
+        'Strategy_C': df['signal_c'],
+    }
+
+    results = {}
+    for name, signals in strategies.items():
+        for fee in [0.0, 0.001]:
+            key = f"{name}_{'w_fee' if fee > 0 else 'no_fee'}"
+            portfolio = run_backtest(df, signals, fee_rate=fee)
+            metrics = calculate_metrics(portfolio)
+            results[key] = {'portfolio': portfolio, 'metrics': metrics}
+
+    # 打印绩效对比表
+    print_metrics_table(results)
+    return results
+```
+
+### 5. 可视化（4 张图）
+
+**图 10：累计收益曲线（所有策略 + 基准）**
+```python
+# 6条线：3策略×无手续费版 + 基准，另加有手续费版虚线
+fig, ax = plt.subplots(figsize=(14, 7))
+# ... 每个策略绘制实线（无费）和虚线（有费）
+ax.set_title('Cumulative Returns: All Strategies vs Benchmark')
+plt.savefig('fig_10_cum_returns.png', dpi=150)
+plt.show()
+```
+
+**图 11：回撤曲线**
+```python
+fig, ax = plt.subplots(figsize=(14, 5))
+# ... 各策略回撤
+ax.set_title('Strategy Drawdown Analysis')
+plt.savefig('fig_11_drawdown.png', dpi=150)
+plt.show()
+```
+
+**图 12：月度收益热力图**
+```python
+# Strategy A 为例的月度收益热力图
+import seaborn as sns
+monthly_ret = portfolio['strategy_return'].resample('M', on='Date').sum().to_frame()
+monthly_ret['Year'] = monthly_ret.index.year
+monthly_ret['Month'] = monthly_ret.index.month
+pivot = monthly_ret.pivot(index='Year', columns='Month', values='strategy_return')
+fig, ax = plt.subplots(figsize=(14, 5))
+sns.heatmap(pivot, annot=True, fmt='.2%', cmap='RdYlGn', center=0, ax=ax)
+ax.set_title('Monthly Returns Heatmap (Strategy A)')
+plt.savefig('fig_12_monthly_heatmap.png', dpi=150)
+plt.show()
+```
+
+**图 13：收益分布直方图**
+```python
+fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+for i, (name, signals) in enumerate(strategies.items()):
+    portfolio = results[f'{name}_no_fee']['portfolio']
+    axes[i].hist(portfolio['strategy_return'].dropna(), bins=50, color='steelblue', alpha=0.7)
+    axes[i].axvline(0, color='red', linestyle='--')
+    axes[i].set_title(f'{name} Return Distribution')
+plt.savefig('fig_13_return_dist.png', dpi=150)
+plt.show()
+```
+
+## 代码规范
+- 回测引擎纯矢量化，禁止 for loop 遍历日期
+- 手续费在换仓时触发，非每日收取
+- 所有绩效指标以格式化字符串输出（方便 Notebook 展示）
+
+## 验收标准
+- [ ] 3 策略 × 2 版本（含/不含手续费）= 6 组回测全部完成
+- [ ] 绩效指标表包含所有 8 项指标
+- [ ] 4 张可视化图全部生成
+- [ ] 基准买入持有收益正确计算
+
+<!-- FACTORY:DONE -->
+
+
+## Output
+
+OpenAI Codex v0.111.0 (research preview)
+--------
+workdir: C:\Coding\AI-factory-projects\quantitative-research-workflow\code
+model: gpt-5.4
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, C:\Users\86579\.codex\memories]
+reasoning effort: none
+reasoning summaries: none
+session id: 019cdde7-841b-7b41-a797-b2a90f20b362
+--------
+user
+# Task 007 — 回测引擎
+
+## 目标
+实现矢量化回测引擎，对三种策略运行无手续费和有手续费两个版本，计算全套绩效指标，生成可视化报告。
+
+## 工作目录
+`code/`
+
+## 依赖
+- `hsi_features.csv`（Task 002 输出）
+- Task 006 策略信号逻辑（需在本文件中重新实现或 import）
+
+## 输出文件
+- `task_007_backtest.py` — 回测引擎模块
+
+## 详细要求
+
+### 1. 回测引擎核心函数
+
+```python
+def run_backtest(df, signals, fee_rate=0.0):
+    """
+    矢量化回测引擎
+
+    Parameters:
+    -----------
+    df : DataFrame，含 return_open 列（次日收益率）
+    signals : Series，值为 1（long）、-1（short）、0（hold）
+    fee_rate : float，单边手续费率（默认 0，含手续费版传 0.001）
+
+    Returns:
+    --------
+    portfolio : DataFrame，含 daily_return、cum_return、drawdown 等列
+    metrics : dict，绩效指标
+    """
+    portfolio = df[['Date', 'return_open']].copy()
+    portfolio['signal'] = signals.values
+
+    # 策略日收益：信号方向 × 次日收益率
+    # 注意：信号在 t 日收盘后确定，t+1 日开盘建仓
+    portfolio['strategy_return'] = portfolio['signal'] * portfolio['return_open']
+
+    # 手续费：当信号发生变化（换仓）时触发单边手续费
+    if fee_rate > 0:
+        position_change = portfolio['signal'].diff().abs()
+        # 换仓成本：仓位变化量 × 手续费（做多做空都收）
+        portfolio['fee'] = position_change * fee_rate
+        portfolio['strategy_return'] = portfolio['strategy_return'] - portfolio['fee']
+    else:
+        portfolio['fee'] = 0.0
+
+    # 累计收益
+    portfolio['cum_return'] = (1 + portfolio['strategy_return']).cumprod() - 1
+
+    # 最大回撤
+    cum_value = (1 + portfolio['strategy_return']).cumprod()
+    rolling_max = cum_value.expanding().max()
+    portfolio['drawdown'] = (cum_value - rolling_max) / rolling_max
+
+    return portfolio
+```
+
+### 2. 绩效指标计算
+
+```python
+def calculate_metrics(portfolio, annual_factor=252):
+    """计算完整绩效指标"""
+    returns = portfolio['strategy_return'].dropna()
+
+    # 年化收益
+    total_return = (1 + returns).prod() - 1
+    n_years = len(returns) / annual_factor
+    annual_return = (1 + total_return) ** (1 / n_years) - 1
+
+    # Sharpe Ratio（假设无风险利率为 0）
+    annual_vol = returns.std() * np.sqrt(annual_factor)
+    sharpe = annual_return / annual_vol if annual_vol > 0 else 0
+
+    # 最大回撤
+    max_drawdown = portfolio['drawdown'].min()
+
+    # 胜率
+    win_rate = (returns > 0).sum() / (returns != 0).sum() if (returns != 0).sum() > 0 else 0
+
+    # 手续费总成本
+    total_fee = portfolio['fee'].sum()
+
+    metrics = {
+        'Total Return': f"{total_return:.2%}",
+        'Annual Return': f"{annual_return:.2%}",
+        'Annual Volatility': f"{annual_vol:.2%}",
+        'Sharpe Ratio': f"{sharpe:.3f}",
+        'Max Drawdown': f"{max_drawdown:.2%}",
+        'Win Rate': f"{win_rate:.2%}",
+        'Total Fee Cost': f"{total_fee:.4f}",
+        'Num Trades': int(portfolio['signal'].diff().abs().sum())
+    }
+    return metrics
+```
+
+### 3. 基准收益（买入持有）
+
+```python
+def benchmark_buyhold(df):
+    """买入持有基准：close-to-close return"""
+    bm = df[['Date', 'return_close']].copy()
+    bm['cum_return'] = (1 + bm['return_close']).cumprod() - 1
+    return bm
+```
+
+### 4. 运行所有回测并打印比较表
+
+```python
+def run_all_backtests(df):
+    strategies = {
+        'Strategy_A': df['signal_a'],
+        'Strategy_B': df['signal_b'],
+        'Strategy_C': df['signal_c'],
+    }
+
+    results = {}
+    for name, signals in strategies.items():
+        for fee in [0.0, 0.001]:
+            key = f"{name}_{'w_fee' if fee > 0 else 'no_fee'}"
+            portfolio = run_backtest(df, signals, fee_rate=fee)
+            metrics = calculate_metrics(portfolio)
+            results[key] = {'portfolio': portfolio, 'metrics': metrics}
+
+    # 打印绩效对比表
+    print_metrics_table(results)
+    return results
+```
+
+### 5. 可视化（4 张图）
+
+**图 10：累计收益曲线（所有策略 + 基准）**
+```python
+# 6条线：3策略×无手续费版 + 基准，另加有手续费版虚线
+fig, ax = plt.subplots(figsize=(14, 7))
+# ... 每个策略绘制实线（无费）和虚线（有费）
+ax.set_title('Cumulative Returns: All Strategies vs Benchmark')
+plt.savefig('fig_10_cum_returns.png', dpi=150)
+plt.show()
+```
+
+**图 11：回撤曲线**
+```python
+fig, ax = plt.subplots(figsize=(14, 5))
+# ... 各策略回撤
+ax.set_title('Strategy Drawdown Analysis')
+plt.savefig('fig_11_drawdown.png', dpi=150)
+plt.show()
+```
+
+**图 12：月度收益热力图**
+```python
+# Strategy A 为例的月度收益热力图
+import seaborn as sns
+monthly_ret = portfolio['strategy_return'].resample('M', on='Date').sum().to_frame()
+monthly_ret['Year'] = monthly_ret.index.year
+monthly_ret['Month'] = monthly_ret.index.month
+pivot = monthly_ret.pivot(index='Year', columns='Month', values='strategy_return')
+fig, ax = plt.subplots(figsize=(14, 5))
+sns.heatmap(pivot, annot=True, fmt='.2%', cmap='RdYlGn', center=0, ax=ax)
+ax.set_title('Monthly Returns Heatmap (Strategy A)')
+plt.savefig('fig_12_monthly_heatmap.png', dpi=150)
+plt.show()
+```
+
+**图 13：收益分布直方图**
+```python
+fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+for i, (name, signals) in enumerate(strategies.items()):
+    portfolio = results[f'{name}_no_fee']['portfolio']
+    axes[i].hist(portfolio['strategy_return'].dropna(), bins=50, color='steelblue', alpha=0.7)
+    axes[i].axvline(0, color='red', linestyle='--')
+    axes[i].set_title(f'{name} Return Distribution')
+plt.savefig('fig_13_return_dist.png', dpi=150)
+plt.show()
+```
+
+## 代码规范
+- 回测引擎纯矢量化，禁止 for loop 遍历日期
+- 手续费在换仓时触发，非每日收取
+- 所有绩效指标以格式化字符串输出（方便 Notebook 展示）
+
+## 验收标准
+- [ ] 3 策略 × 2 版本（含/不含手续费）= 6 组回测全部完成
+- [ ] 绩效指标表包含所有 8 项指标
+- [ ] 4 张可视化图全部生成
+- [ ] 基准买入持有收益正确计算
+
+<!-- FACTORY:DONE -->
+
+mcp startup: no servers
+codex
+先检查现有代码结构和 Task 006 的信号实现，确认 `hsi_features.csv` 字段以及当前项目里是否已有可复用逻辑。
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command 'Get-ChildItem -Force' in C:\Coding\AI-factory-projects\quantitative-research-workflow\codeexec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command 'rg --files' in C:\Coding\AI-factory-projects\quantitative-research-workflow\codeexec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command 'rg -n "signal_a|signal_b|signal_c|Task 006|strategy" -S .' in C:\Coding\AI-factory-projects\quantitative-research-workflow\code succeeded in 287ms:
+__pycache__\task_006_strategy_design.cpython-314.pyc
+__pycache__\task_005_insights.cpython-314.pyc
+__pycache__\task_004_signal_analysis.cpython-314.pyc
+__pycache__\task_003_eda.cpython-314.pyc
+__pycache__\task_002_feature_engineering.cpython-314.pyc
+__pycache__\task_001_data_loading.cpython-314.pyc
+task_006_strategy_design.py
+task_005_insights.py
+task_004_signal_analysis.py
+task_003_eda.py
+task_002_feature_engineering.py
+task_001_data_loading.py
+ succeeded in 333ms:
+.\task_005_insights.py:7:from task_004_signal_analysis import (
+.\task_006_strategy_design.py:7:SIGNAL_COLUMNS = ["signal_a", "signal_b", "signal_c"]
+.\task_006_strategy_design.py:22:    """Validate that all strategy inputs are available."""
+.\task_006_strategy_design.py:36:    """Print a compact distribution summary for a strategy signal series."""
+.\task_006_strategy_design.py:47:def strategy_a_signals(df: pd.DataFrame) -> pd.Series:
+.\task_006_strategy_design.py:73:def strategy_b_signals(df: pd.DataFrame, threshold: float = 0.1) -> pd.Series:
+.\task_006_strategy_design.py:102:def strategy_c_signals(df: pd.DataFrame, threshold: float = 0.1) -> pd.Series:
+.\task_006_strategy_design.py:126:    base_signals = strategy_b_signals(df, threshold)
+.\task_006_strategy_design.py:142:    """Generate all strategy signals and return a DataFrame copy with signal columns."""
+.\task_006_strategy_design.py:149:    output["signal_a"] = strategy_a_signals(output)
+.\task_006_strategy_design.py:151:    output["signal_b"] = strategy_b_signals(output, threshold=threshold)
+.\task_006_strategy_design.py:153:    output["signal_c"] = strategy_c_signals(output, threshold=threshold)
+.\task_006_strategy_design.py:155:    effective_b = (output["signal_b"] != 0).sum()
+.\task_006_strategy_design.py:156:    effective_c = (output["signal_c"] != 0).sum()
+.\task_006_strategy_design.py:165:        f"  Strategy A non-zero signals: {(output['signal_a'] != 0).sum()}\n"
+ succeeded in 360ms:
+
+
+    目录: C:\Coding\AI-factory-projects\quantitative-research-workflow\code
+
+
+Mode                 LastWriteTime         Length Name                                                                 
+----                 -------------         ------ ----                                                                 
+d-----         2026/3/12      1:17                __pycache__                                                          
+-a----         2026/3/12      1:10           2802 task_001_data_loading.py                                             
+-a----         2026/3/12      1:11           3991 task_002_feature_engineering.py                                      
+-a----         2026/3/12      1:12           6707 task_003_eda.py                                                      
+-a----         2026/3/12      1:14           6835 task_004_signal_analysis.py                                          
+-a----         2026/3/12      1:15           9255 task_005_insights.py                                                 
+-a----         2026/3/12      1:17           6952 task_006_strategy_design.py                                          
+
+
+codex
+已经定位到 `task_006_strategy_design.py`，下一步读取信号规则和上游特征字段，避免在回测里对列名做错误假设。
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command 'Get-Content task_002_feature_engineering.py' in C:\Coding\AI-factory-projects\quantitative-research-workflow\codeexec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command 'Get-Content task_006_strategy_design.py' in C:\Coding\AI-factory-projects\quantitative-research-workflow\codeexec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command 'Get-Content task_001_data_loading.py' in C:\Coding\AI-factory-projects\quantitative-research-workflow\code succeeded in 423ms:
+from pathlib import Path
+
+import pandas as pd
+
+
+INPUT_FILE = "hsi_clean.csv"
+OUTPUT_FILE = "hsi_features.csv"
+FEATURE_SUMMARY_COLUMNS = [
+    "sentiment_score",
+    "vote_imbalance",
+    "return_open",
+    "return_close",
+]
+
+
+def load_data(file_path: str) -> pd.DataFrame:
+    print(f"Loading clean data from {file_path}...")
+    df = pd.read_csv(file_path)
+    if "Date" in df.columns:
+        df["Date"] = pd.to_datetime(df["Date"])
+ succeeded in 429ms:
+from pathlib import Path
+
+import pandas as pd
+
+
+INPUT_FILE = "hsi_features.csv"
+SIGNAL_COLUMNS = ["signal_a", "signal_b", "signal_c"]
+
+
+def load_data(file_path: str) -> pd.DataFrame:
+    """Load feature data generated in Task 002."""
+    print(f"Loading feature data from {file_path}...")
+    df = pd.read_csv(file_path)
+    if "Date" in df.columns:
+        df["Date"] = pd.to_datetime(df["Date"])
+        df = df.sort_values("Date").reset_index(drop=True)
+    print("Feature data loaded.")
+    return df
+
+
+ succeeded in 396ms:
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+
+
+DATA_FILE = "HSI.xlsx"
+OUTPUT_FILE = "hsi_clean.csv"
+VOTE_TOLERANCE = 1e-6
+SUMMARY_COLUMNS = ["Open", "High", "Low", "Close", "Up votes", "Down votes"]
+
+
+def load_data(file_path: str) -> pd.DataFrame:
+    print(f"Loading data from {file_path}...")
+    df = pd.read_excel(file_path)
+    df["Date"] = pd.to_datetime(df["Date"])
+    df = df.sort_values("Date").reset_index(drop=True)
+    print("Data loaded and sorted by Date.")
+    return df
+
+codex
+上下游接口已经清楚：`return_open`、`return_close` 和三个信号列都能从现有任务推导。现在检查数据文件是否在工作目录，并准备直接实现 `task_007_backtest.py`。
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command 'Get-ChildItem hsi_features.csv, hsi_clean.csv, HSI.xlsx -ErrorAction SilentlyContinue | Format-Table Name,Length,LastWriteTime' in C:\Coding\AI-factory-projects\quantitative-research-workflow\codeexec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command 'Get-Content task_004_signal_analysis.py' in C:\Coding\AI-factory-projects\quantitative-research-workflow\code succeeded in 441ms:
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import seaborn as sns
+from scipy import stats
+from scipy.stats import ttest_1samp
+
+
+INPUT_FILE = "hsi_features.csv"
+MONTHLY_IC_FIG = "fig_08_monthly_ic.png"
+SIGNAL_DECAY_FIG = "fig_09_signal_decay.png"
+MONTHLY_IC_OUTPUT = "monthly_ic.csv"
+SIGNAL_DECAY_OUTPUT = "signal_decay.csv"
+MIN_MONTHLY_OBSERVATIONS = 5
+DECAY_HORIZONS = [1, 2, 3]
+FONT_SIZE = 12
+
+
+ exited 1 in 462ms:
+
+codex
+开始写回测模块。实现会覆盖数据加载、信号补齐、6 组回测、8 项指标、基准和 4 张图，并尽量复用 Task 006 的策略函数而不是复制逻辑。
+file update
+A C:\Coding\AI-factory-projects\quantitative-research-workflow\code\task_007_backtest.py
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import seaborn as sns
+
+from task_006_strategy_design import SIGNAL_COLUMNS, generate_all_signals
+
+
+INPUT_FILE = "hsi_features.csv"
+FEE_RATE = 0.001
+ANNUAL_FACTOR = 252
+REQUIRED_COLUMNS = {"Date", "return_open", "return_close"}
+FIG_CUM_RETURNS = "fig_10_cum_returns.png"
+FIG_DRAWDOWN = "fig_11_drawdown.png"
+FIG_MONTHLY_HEATMAP = "fig_12_monthly_heatmap.png"
+FIG_RETURN_DIST = "fig_13_return_dist.png"
+
+
+def load_data(file_path: str) -> pd.DataFrame:
+    """Load feature data and enforce chronological order."""
+    print(f"Loading feature data from {file_path}...")
+    df = pd.read_csv(file_path)
+    if "Date" in df.columns:
+        df["Date"] = pd.to_datetime(df["Date"])
+        df = df.sort_values("Date").reset_index(drop=True)
+    print("Feature data loaded.")
+    return df
+
+
+def validate_columns(df: pd.DataFrame) -> None:
+    """Validate that all base columns required for backtesting exist."""
+    missing_columns = REQUIRED_COLUMNS.difference(df.columns)
+    if missing_columns:
+        missing_str = ", ".join(sorted(missing_columns))
+        raise ValueError(f"Missing required columns: {missing_str}")
+
+
+def ensure_signals(df: pd.DataFrame) -> pd.DataFrame:
+    """Generate strategy signals if they are not already present."""
+    if set(SIGNAL_COLUMNS).issubset(df.columns):
+        return df.copy()
+    return generate_all_signals(df)
+
+
+def configure_plot_style() -> None:
+    """Apply a consistent plotting style across all charts."""
+    sns.set_style("whitegrid")
+    plt.rcParams["figure.figsize"] = (12, 6)
+    plt.rcParams["axes.titlesize"] = 14
+    plt.rcParams["axes.labelsize"] = 11
+    plt.rcParams["legend.fontsize"] = 10
+
+
+def save_and_close(fig: plt.Figure, output_path: str) -> None:
+    """Save figure to disk and release matplotlib memory."""
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    print(f"Saved {output_path}")
+
+
+def run_backtest(df: pd.DataFrame, signals: pd.Series, fee_rate: float = 0.0) -> pd.DataFrame:
+    """
+    矢量化回测引擎
+
+    Parameters
+    ----------
+    df : DataFrame
+        Must include Date and return_open columns.
+    signals : Series
+        Values in {1, -1, 0}.
+    fee_rate : float
+        Single-side fee rate.
+
+    Returns
+    -------
+    DataFrame
+        Portfolio path with daily return, cumulative return, fee, and drawdown.
+    """
+    portfolio = df[["Date", "return_open"]].copy()
+    portfolio["signal"] = pd.Series(signals, index=df.index).fillna(0).astype("int64")
+    portfolio["strategy_return"] = portfolio["signal"] * portfolio["return_open"].fillna(0.0)
+
+    if fee_rate > 0:
+        position_change = portfolio["signal"].diff().abs().fillna(0)
+        portfolio["fee"] = position_change * fee_rate
+        portfolio["strategy_return"] = portfolio["strategy_return"] - portfolio["fee"]
+    else:
+        portfolio["fee"] = 0.0
+
+    portfolio["daily_return"] = portfolio["strategy_return"]
+
+    cum_value = (1 + portfolio["strategy_return"]).cumprod()
+    portfolio["cum_return"] = cum_value - 1
+    rolling_max = cum_value.cummax()
+    portfolio["drawdown"] = (cum_value - rolling_max) / rolling_max
+
+    return portfolio
+
+
+def calculate_metrics(portfolio: pd.DataFrame, annual_factor: int = ANNUAL_FACTOR) -> dict[str, str | int]:
+    """Calculate a full set of formatted performance metrics."""
+    returns = portfolio["strategy_return"].dropna()
+    if returns.empty:
+        return {
+            "Total Return": "0.00%",
+            "Annual Return": "0.00%",
+            "Annual Volatility": "0.00%",
+            "Sharpe Ratio": "0.000",
+            "Max Drawdown": "0.00%",
+            "Win Rate": "0.00%",
+            "Total Fee Cost": "0.0000",
+            "Num Trades": 0,
+        }
+
+    total_return = (1 + returns).prod() - 1
+    n_years = len(returns) / annual_factor
+    annual_return = (1 + total_return) ** (1 / n_years) - 1 if n_years > 0 else 0.0
+    annual_vol = returns.std() * np.sqrt(annual_factor)
+    sharpe = annual_return / annual_vol if annual_vol > 0 else 0.0
+    max_drawdown = portfolio["drawdown"].min()
+
+    active_days = (returns != 0).sum()
+    win_rate = (returns > 0).sum() / active_days if active_days > 0 else 0.0
+    total_fee = float(portfolio["fee"].sum())
+    num_trades = int(portfolio["signal"].diff().abs().fillna(0).sum())
+
+    return {
+        "Total Return": f"{total_return:.2%}",
+        "Annual Return": f"{annual_return:.2%}",
+        "Annual Volatility": f"{annual_vol:.2%}",
+        "Sharpe Ratio": f"{sharpe:.3f}",
+        "Max Drawdown": f"{max_drawdown:.2%}",
+        "Win Rate": f"{win_rate:.2%}",
+        "Total Fee Cost": f"{total_fee:.4f}",
+        "Num Trades": num_trades,
+    }
+
+
+def benchmark_buyhold(df: pd.DataFrame) -> pd.DataFrame:
+    """买入持有基准：close-to-close return."""
+    bm = df[["Date", "return_close"]].copy()
+    bm["return_close"] = bm["return_close"].fillna(0.0)
+    bm["cum_return"] = (1 + bm["return_close"]).cumprod() - 1
+    cum_value = 1 + bm["cum_return"]
+    bm["drawdown"] = (cum_value - cum_value.cummax()) / cum_value.cummax()
+    return bm
+
+
+def print_metrics_table(results: dict[str, dict[str, object]]) -> pd.DataFrame:
+    """Print a comparison table for all strategy backtests."""
+    metrics_table = pd.DataFrame(
+        {name: result["metrics"] for name, result in results.items()}
+    ).T
+    print("\n" + "=" * 90)
+    print("BACKTEST PERFORMANCE COMPARISON")
+    print("=" * 90)
+    print(metrics_table.to_string())
+    return metrics_table
+
+
+def run_all_backtests(df: pd.DataFrame) -> dict[str, dict[str, object]]:
+    """Run all strategies with and without transaction fees."""
+    strategies = {
+        "Strategy_A": df["signal_a"],
+        "Strategy_B": df["signal_b"],
+        "Strategy_C": df["signal_c"],
+    }
+
+    results: dict[str, dict[str, object]] = {}
+    for name, signals in strategies.items():
+        for fee in (0.0, FEE_RATE):
+            key = f"{name}_{'w_fee' if fee > 0 else 'no_fee'}"
+            portfolio = run_backtest(df, signals, fee_rate=fee)
+            metrics = calculate_metrics(portfolio)
+            results[key] = {"portfolio": portfolio, "metrics": metrics}
+
+    print_metrics_table(results)
+    return results
+
+
+def plot_cumulative_returns(df: pd.DataFrame, results: dict[str, dict[str, object]]) -> None:
+    """Plot cumulative return curves for all strategies and the benchmark."""
+    benchmark = benchmark_buyhold(df)
+    fig, ax = plt.subplots(figsize=(14, 7))
+
+    color_map = {
+        "Strategy_A": "#1f77b4",
+        "Strategy_B": "#ff7f0e",
+        "Strategy_C": "#2ca02c",
+    }
+
+    ax.plot(
+        benchmark["Date"],
+        benchmark["cum_return"],
+        color="black",
+        linewidth=2,
+        label="Benchmark Buy & Hold",
+    )
+
+    for strategy_name, color in color_map.items():
+        no_fee = results[f"{strategy_name}_no_fee"]["portfolio"]
+        with_fee = results[f"{strategy_name}_w_fee"]["portfolio"]
+        ax.plot(no_fee["Date"], no_fee["cum_return"], color=color, linewidth=2, label=f"{strategy_name} no fee")
+        ax.plot(
+            with_fee["Date"],
+            with_fee["cum_return"],
+            color=color,
+            linewidth=1.8,
+            linestyle="--",
+            label=f"{strategy_name} w/ fee",
+        )
+
+    ax.set_title("Cumulative Returns: All Strategies vs Benchmark")
+    ax.set_xlabel("Date")
+    ax.set_ylabel("Cumulative Return")
+    ax.legend(ncol=2)
+    save_and_close(fig, FIG_CUM_RETURNS)
+
+
+def plot_drawdown(results: dict[str, dict[str, object]]) -> None:
+    """Plot drawdown curves for all strategy variants."""
+    fig, ax = plt.subplots(figsize=(14, 5))
+
+    for name, result in results.items():
+        portfolio = result["portfolio"]
+        linestyle = "--" if name.endswith("w_fee") else "-"
+        ax.plot(portfolio["Date"], portfolio["drawdown"], linewidth=1.5, linestyle=linestyle, label=name)
+
+    ax.set_title("Strategy Drawdown Analysis")
+    ax.set_xlabel("Date")
+    ax.set_ylabel("Drawdown")
+    ax.legend(ncol=2)
+    save_and_close(fig, FIG_DRAWDOWN)
+
+
+def plot_monthly_heatmap(portfolio: pd.DataFrame, title: str = "Monthly Returns Heatmap (Strategy A)") -> None:
+    """Plot a monthly return heatmap for a single strategy portfolio."""
+    monthly = portfolio[["Date", "strategy_return"]].copy()
+    monthly["Date"] = pd.to_datetime(monthly["Date"])
+    monthly = monthly.set_index("Date")
+    monthly_ret = monthly["strategy_return"].resample("ME").sum().to_frame()
+    monthly_ret["Year"] = monthly_ret.index.year
+    monthly_ret["Month"] = monthly_ret.index.month
+    pivot = monthly_ret.pivot(index="Year", columns="Month", values="strategy_return")
+    pivot = pivot.reindex(columns=range(1, 13))
+
+    fig, ax = plt.subplots(figsize=(14, 5))
+    sns.heatmap(pivot, annot=True, fmt=".2%", cmap="RdYlGn", center=0, ax=ax)
+    ax.set_title(title)
+    ax.set_xlabel("Month")
+    ax.set_ylabel("Year")
+    save_and_close(fig, FIG_MONTHLY_HEATMAP)
+
+
+def plot_return_distributions(results: dict[str, dict[str, object]]) -> None:
+    """Plot return histograms for the three no-fee strategy variants."""
+    fig, axes = plt.subplots(1, 3, figsize=(15, 5), sharey=True)
+    strategies = ["Strategy_A", "Strategy_B", "Strategy_C"]
+
+    for i, strategy_name in enumerate(strategies):
+        portfolio = results[f"{strategy_name}_no_fee"]["portfolio"]
+        axes[i].hist(
+            portfolio["strategy_return"].dropna(),
+            bins=50,
+            color="steelblue",
+            alpha=0.75,
+            edgecolor="white",
+        )
+        axes[i].axvline(0, color="red", linestyle="--", linewidth=1)
+        axes[i].set_title(f"{strategy_name} Return Distribution")
+        axes[i].set_xlabel("Daily Return")
+        axes[i].set_ylabel("Frequency")
+
+    save_and_close(fig, FIG_RETURN_DIST)
+
+
+def main() -> None:
+    input_path = Path(INPUT_FILE)
+    if not input_path.exists():
+        raise FileNotFoundError(
+            f"Input file not found: {input_path.resolve()}. "
+            "Run task_002_feature_engineering.py first to generate hsi_features.csv."
+        )
+
+    configure_plot_style()
+    df = load_data(str(input_path))
+    validate_columns(df)
+    df = ensure_signals(df)
+
+    results = run_all_backtests(df)
+    plot_cumulative_returns(df, results)
+    plot_drawdown(results)
+    plot_monthly_heatmap(results["Strategy_A_no_fee"]["portfolio"])
+    plot_return_distributions(results)
+
+
+if __name__ == "__main__":
+    main()
+apply_patch(auto_approved=true) exited 0 in 750ms:
+Success. Updated the following files:
+A C:\Coding\AI-factory-projects\quantitative-research-workflow\code\task_007_backtest.py
+file update:
+diff --git a/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_007_backtest.py b/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_007_backtest.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..7687e28c998b5781563c4e7ea6909d0bfb2e0c79
+--- /dev/null
++++ b/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_007_backtest.py
+@@ -0,0 +1,301 @@
++from pathlib import Path
++
++import matplotlib.pyplot as plt
++import numpy as np
++import pandas as pd
++import seaborn as sns
++
++from task_006_strategy_design import SIGNAL_COLUMNS, generate_all_signals
++
++
++INPUT_FILE = "hsi_features.csv"
++FEE_RATE = 0.001
++ANNUAL_FACTOR = 252
++REQUIRED_COLUMNS = {"Date", "return_open", "return_close"}
++FIG_CUM_RETURNS = "fig_10_cum_returns.png"
++FIG_DRAWDOWN = "fig_11_drawdown.png"
++FIG_MONTHLY_HEATMAP = "fig_12_monthly_heatmap.png"
++FIG_RETURN_DIST = "fig_13_return_dist.png"
++
++
++def load_data(file_path: str) -> pd.DataFrame:
++    """Load feature data and enforce chronological order."""
++    print(f"Loading feature data from {file_path}...")
++    df = pd.read_csv(file_path)
++    if "Date" in df.columns:
++        df["Date"] = pd.to_datetime(df["Date"])
++        df = df.sort_values("Date").reset_index(drop=True)
++    print("Feature data loaded.")
++    return df
++
++
++def validate_columns(df: pd.DataFrame) -> None:
++    """Validate that all base columns required for backtesting exist."""
++    missing_columns = REQUIRED_COLUMNS.difference(df.columns)
++    if missing_columns:
++        missing_str = ", ".join(sorted(missing_columns))
++        raise ValueError(f"Missing required columns: {missing_str}")
++
++
++def ensure_signals(df: pd.DataFrame) -> pd.DataFrame:
++    """Generate strategy signals if they are not already present."""
++    if set(SIGNAL_COLUMNS).issubset(df.columns):
++        return df.copy()
++    return generate_all_signals(df)
++
++
++def configure_plot_style() -> None:
++    """Apply a consistent plotting style across all charts."""
++    sns.set_style("whitegrid")
++    plt.rcParams["figure.figsize"] = (12, 6)
++    plt.rcParams["axes.titlesize"] = 14
++    plt.rcParams["axes.labelsize"] = 11
++    plt.rcParams["legend.fontsize"] = 10
++
++
++def save_and_close(fig: plt.Figure, output_path: str) -> None:
++    """Save figure to disk and release matplotlib memory."""
++    fig.tight_layout()
++    fig.savefig(output_path, dpi=150, bbox_inches="tight")
++    plt.close(fig)
++    print(f"Saved {output_path}")
++
++
++def run_backtest(df: pd.DataFrame, signals: pd.Series, fee_rate: float = 0.0) -> pd.DataFrame:
++    """
++    矢量化回测引擎
++
++    Parameters
++    ----------
++    df : DataFrame
++        Must include Date and return_open columns.
++    signals : Series
++        Values in {1, -1, 0}.
++    fee_rate : float
++        Single-side fee rate.
++
++    Returns
++    -------
++    DataFrame
++        Portfolio path with daily return, cumulative return, fee, and drawdown.
++    """
++    portfolio = df[["Date", "return_open"]].copy()
++    portfolio["signal"] = pd.Series(signals, index=df.index).fillna(0).astype("int64")
++    portfolio["strategy_return"] = portfolio["signal"] * portfolio["return_open"].fillna(0.0)
++
++    if fee_rate > 0:
++        position_change = portfolio["signal"].diff().abs().fillna(0)
++        portfolio["fee"] = position_change * fee_rate
++        portfolio["strategy_return"] = portfolio["strategy_return"] - portfolio["fee"]
++    else:
++        portfolio["fee"] = 0.0
++
++    portfolio["daily_return"] = portfolio["strategy_return"]
++
++    cum_value = (1 + portfolio["strategy_return"]).cumprod()
++    portfolio["cum_return"] = cum_value - 1
++    rolling_max = cum_value.cummax()
++    portfolio["drawdown"] = (cum_value - rolling_max) / rolling_max
++
++    return portfolio
++
++
++def calculate_metrics(portfolio: pd.DataFrame, annual_factor: int = ANNUAL_FACTOR) -> dict[str, str | int]:
++    """Calculate a full set of formatted performance metrics."""
++    returns = portfolio["strategy_return"].dropna()
++    if returns.empty:
++        return {
++            "Total Return": "0.00%",
++            "Annual Return": "0.00%",
++            "Annual Volatility": "0.00%",
++            "Sharpe Ratio": "0.000",
++            "Max Drawdown": "0.00%",
++            "Win Rate": "0.00%",
++            "Total Fee Cost": "0.0000",
++            "Num Trades": 0,
++        }
++
++    total_return = (1 + returns).prod() - 1
++    n_years = len(returns) / annual_factor
++    annual_return = (1 + total_return) ** (1 / n_years) - 1 if n_years > 0 else 0.0
++    annual_vol = returns.std() * np.sqrt(annual_factor)
++    sharpe = annual_return / annual_vol if annual_vol > 0 else 0.0
++    max_drawdown = portfolio["drawdown"].min()
++
++    active_days = (returns != 0).sum()
++    win_rate = (returns > 0).sum() / active_days if active_days > 0 else 0.0
++    total_fee = float(portfolio["fee"].sum())
++    num_trades = int(portfolio["signal"].diff().abs().fillna(0).sum())
++
++    return {
++        "Total Return": f"{total_return:.2%}",
++        "Annual Return": f"{annual_return:.2%}",
++        "Annual Volatility": f"{annual_vol:.2%}",
++        "Sharpe Ratio": f"{sharpe:.3f}",
++        "Max Drawdown": f"{max_drawdown:.2%}",
++        "Win Rate": f"{win_rate:.2%}",
++        "Total Fee Cost": f"{total_fee:.4f}",
++        "Num Trades": num_trades,
++    }
++
++
++def benchmark_buyhold(df: pd.DataFrame) -> pd.DataFrame:
++    """买入持有基准：close-to-close return."""
++    bm = df[["Date", "return_close"]].copy()
++    bm["return_close"] = bm["return_close"].fillna(0.0)
++    bm["cum_return"] = (1 + bm["return_close"]).cumprod() - 1
++    cum_value = 1 + bm["cum_return"]
++    bm["drawdown"] = (cum_value - cum_value.cummax()) / cum_value.cummax()
++    return bm
++
++
++def print_metrics_table(results: dict[str, dict[str, object]]) -> pd.DataFrame:
++    """Print a comparison table for all strategy backtests."""
++    metrics_table = pd.DataFrame(
++        {name: result["metrics"] for name, result in results.items()}
++    ).T
++    print("\n" + "=" * 90)
++    print("BACKTEST PERFORMANCE COMPARISON")
++    print("=" * 90)
++    print(metrics_table.to_string())
++    return metrics_table
++
++
++def run_all_backtests(df: pd.DataFrame) -> dict[str, dict[str, object]]:
++    """Run all strategies with and without transaction fees."""
++    strategies = {
++        "Strategy_A": df["signal_a"],
++        "Strategy_B": df["signal_b"],
++        "Strategy_C": df["signal_c"],
++    }
++
++    results: dict[str, dict[str, object]] = {}
++    for name, signals in strategies.items():
++        for fee in (0.0, FEE_RATE):
++            key = f"{name}_{'w_fee' if fee > 0 else 'no_fee'}"
++            portfolio = run_backtest(df, signals, fee_rate=fee)
++            metrics = calculate_metrics(portfolio)
++            results[key] = {"portfolio": portfolio, "metrics": metrics}
++
++    print_metrics_table(results)
++    return results
++
++
++def plot_cumulative_returns(df: pd.DataFrame, results: dict[str, dict[str, object]]) -> None:
++    """Plot cumulative return curves for all strategies and the benchmark."""
++    benchmark = benchmark_buyhold(df)
++    fig, ax = plt.subplots(figsize=(14, 7))
++
++    color_map = {
++        "Strategy_A": "#1f77b4",
++        "Strategy_B": "#ff7f0e",
++        "Strategy_C": "#2ca02c",
++    }
++
++    ax.plot(
++        benchmark["Date"],
++        benchmark["cum_return"],
++        color="black",
++        linewidth=2,
++        label="Benchmark Buy & Hold",
++    )
++
++    for strategy_name, color in color_map.items():
++        no_fee = results[f"{strategy_name}_no_fee"]["portfolio"]
++        with_fee = results[f"{strategy_name}_w_fee"]["portfolio"]
++        ax.plot(no_fee["Date"], no_fee["cum_return"], color=color, linewidth=2, label=f"{strategy_name} no fee")
++        ax.plot(
++            with_fee["Date"],
++            with_fee["cum_return"],
++            color=color,
++            linewidth=1.8,
++            linestyle="--",
++            label=f"{strategy_name} w/ fee",
++        )
++
++    ax.set_title("Cumulative Returns: All Strategies vs Benchmark")
++    ax.set_xlabel("Date")
++    ax.set_ylabel("Cumulative Return")
++    ax.legend(ncol=2)
++    save_and_close(fig, FIG_CUM_RETURNS)
++
++
++def plot_drawdown(results: dict[str, dict[str, object]]) -> None:
++    """Plot drawdown curves for all strategy variants."""
++    fig, ax = plt.subplots(figsize=(14, 5))
++
++    for name, result in results.items():
++        portfolio = result["portfolio"]
++        linestyle = "--" if name.endswith("w_fee") else "-"
++        ax.plot(portfolio["Date"], portfolio["drawdown"], linewidth=1.5, linestyle=linestyle, label=name)
++
++    ax.set_title("Strategy Drawdown Analysis")
++    ax.set_xlabel("Date")
++    ax.set_ylabel("Drawdown")
++    ax.legend(ncol=2)
++    save_and_close(fig, FIG_DRAWDOWN)
++
++
++def plot_monthly_heatmap(portfolio: pd.DataFrame, title: str = "Monthly Returns Heatmap (Strategy A)") -> None:
++    """Plot a monthly return heatmap for a single strategy portfolio."""
++    monthly = portfolio[["Date", "strategy_return"]].copy()
++    monthly["Date"] = pd.to_datetime(monthly["Date"])
++    monthly = monthly.set_index("Date")
++    monthly_ret = monthly["strategy_return"].resample("ME").sum().to_frame()
++    monthly_ret["Year"] = monthly_ret.index.year
++    monthly_ret["Month"] = monthly_ret.index.month
++    pivot = monthly_ret.pivot(index="Year", columns="Month", values="strategy_return")
++    pivot = pivot.reindex(columns=range(1, 13))
++
++    fig, ax = plt.subplots(figsize=(14, 5))
++    sns.heatmap(pivot, annot=True, fmt=".2%", cmap="RdYlGn", center=0, ax=ax)
++    ax.set_title(title)
++    ax.set_xlabel("Month")
++    ax.set_ylabel("Year")
++    save_and_close(fig, FIG_MONTHLY_HEATMAP)
++
++
++def plot_return_distributions(results: dict[str, dict[str, object]]) -> None:
++    """Plot return histograms for the three no-fee strategy variants."""
++    fig, axes = plt.subplots(1, 3, figsize=(15, 5), sharey=True)
++    strategies = ["Strategy_A", "Strategy_B", "Strategy_C"]
++
++    for i, strategy_name in enumerate(strategies):
++        portfolio = results[f"{strategy_name}_no_fee"]["portfolio"]
++        axes[i].hist(
++            portfolio["strategy_return"].dropna(),
++            bins=50,
++            color="steelblue",
++            alpha=0.75,
++            edgecolor="white",
++        )
++        axes[i].axvline(0, color="red", linestyle="--", linewidth=1)
++        axes[i].set_title(f"{strategy_name} Return Distribution")
++        axes[i].set_xlabel("Daily Return")
++        axes[i].set_ylabel("Frequency")
++
++    save_and_close(fig, FIG_RETURN_DIST)
++
++
++def main() -> None:
++    input_path = Path(INPUT_FILE)
++    if not input_path.exists():
++        raise FileNotFoundError(
++            f"Input file not found: {input_path.resolve()}. "
++            "Run task_002_feature_engineering.py first to generate hsi_features.csv."
++        )
++
++    configure_plot_style()
++    df = load_data(str(input_path))
++    validate_columns(df)
++    df = ensure_signals(df)
++
++    results = run_all_backtests(df)
++    plot_cumulative_returns(df, results)
++    plot_drawdown(results)
++    plot_monthly_heatmap(results["Strategy_A_no_fee"]["portfolio"])
++    plot_return_distributions(results)
++
++
++if __name__ == "__main__":
++    main()
+
+file update:
+diff --git a/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_007_backtest.py b/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_007_backtest.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..7687e28c998b5781563c4e7ea6909d0bfb2e0c79
+--- /dev/null
++++ b/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_007_backtest.py
+@@ -0,0 +1,301 @@
++from pathlib import Path
++
++import matplotlib.pyplot as plt
++import numpy as np
++import pandas as pd
++import seaborn as sns
++
++from task_006_strategy_design import SIGNAL_COLUMNS, generate_all_signals
++
++
++INPUT_FILE = "hsi_features.csv"
++FEE_RATE = 0.001
++ANNUAL_FACTOR = 252
++REQUIRED_COLUMNS = {"Date", "return_open", "return_close"}
++FIG_CUM_RETURNS = "fig_10_cum_returns.png"
++FIG_DRAWDOWN = "fig_11_drawdown.png"
++FIG_MONTHLY_HEATMAP = "fig_12_monthly_heatmap.png"
++FIG_RETURN_DIST = "fig_13_return_dist.png"
++
++
++def load_data(file_path: str) -> pd.DataFrame:
++    """Load feature data and enforce chronological order."""
++    print(f"Loading feature data from {file_path}...")
++    df = pd.read_csv(file_path)
++    if "Date" in df.columns:
++        df["Date"] = pd.to_datetime(df["Date"])
++        df = df.sort_values("Date").reset_index(drop=True)
++    print("Feature data loaded.")
++    return df
++
++
++def validate_columns(df: pd.DataFrame) -> None:
++    """Validate that all base columns required for backtesting exist."""
++    missing_columns = REQUIRED_COLUMNS.difference(df.columns)
++    if missing_columns:
++        missing_str = ", ".join(sorted(missing_columns))
++        raise ValueError(f"Missing required columns: {missing_str}")
++
++
++def ensure_signals(df: pd.DataFrame) -> pd.DataFrame:
++    """Generate strategy signals if they are not already present."""
++    if set(SIGNAL_COLUMNS).issubset(df.columns):
++        return df.copy()
++    return generate_all_signals(df)
++
++
++def configure_plot_style() -> None:
++    """Apply a consistent plotting style across all charts."""
++    sns.set_style("whitegrid")
++    plt.rcParams["figure.figsize"] = (12, 6)
++    plt.rcParams["axes.titlesize"] = 14
++    plt.rcParams["axes.labelsize"] = 11
++    plt.rcParams["legend.fontsize"] = 10
++
++
++def save_and_close(fig: plt.Figure, output_path: str) -> None:
++    """Save figure to disk and release matplotlib memory."""
++    fig.tight_layout()
++    fig.savefig(output_path, dpi=150, bbox_inches="tight")
++    plt.close(fig)
++    print(f"Saved {output_path}")
++
++
++def run_backtest(df: pd.DataFrame, signals: pd.Series, fee_rate: float = 0.0) -> pd.DataFrame:
++    """
++    矢量化回测引擎
++
++    Parameters
++    ----------
++    df : DataFrame
++        Must include Date and return_open columns.
++    signals : Series
++        Values in {1, -1, 0}.
++    fee_rate : float
++        Single-side fee rate.
++
++    Returns
++    -------
++    DataFrame
++        Portfolio path with daily return, cumulative return, fee, and drawdown.
++    """
++    portfolio = df[["Date", "return_open"]].copy()
++    portfolio["signal"] = pd.Series(signals, index=df.index).fillna(0).astype("int64")
++    portfolio["strategy_return"] = portfolio["signal"] * portfolio["return_open"].fillna(0.0)
++
++    if fee_rate > 0:
++        position_change = portfolio["signal"].diff().abs().fillna(0)
++        portfolio["fee"] = position_change * fee_rate
++        portfolio["strategy_return"] = portfolio["strategy_return"] - portfolio["fee"]
++    else:
++        portfolio["fee"] = 0.0
++
++    portfolio["daily_return"] = portfolio["strategy_return"]
++
++    cum_value = (1 + portfolio["strategy_return"]).cumprod()
++    portfolio["cum_return"] = cum_value - 1
++    rolling_max = cum_value.cummax()
++    portfolio["drawdown"] = (cum_value - rolling_max) / rolling_max
++
++    return portfolio
++
++
++def calculate_metrics(portfolio: pd.DataFrame, annual_factor: int = ANNUAL_FACTOR) -> dict[str, str | int]:
++    """Calculate a full set of formatted performance metrics."""
++    returns = portfolio["strategy_return"].dropna()
++    if returns.empty:
++        return {
++            "Total Return": "0.00%",
++            "Annual Return": "0.00%",
++            "Annual Volatility": "0.00%",
++            "Sharpe Ratio": "0.000",
++            "Max Drawdown": "0.00%",
++            "Win Rate": "0.00%",
++            "Total Fee Cost": "0.0000",
++            "Num Trades": 0,
++        }
++
++    total_return = (1 + returns).prod() - 1
++    n_years = len(returns) / annual_factor
++    annual_return = (1 + total_return) ** (1 / n_years) - 1 if n_years > 0 else 0.0
++    annual_vol = returns.std() * np.sqrt(annual_factor)
++    sharpe = annual_return / annual_vol if annual_vol > 0 else 0.0
++    max_drawdown = portfolio["drawdown"].min()
++
++    active_days = (returns != 0).sum()
++    win_rate = (returns > 0).sum() / active_days if active_days > 0 else 0.0
++    total_fee = float(portfolio["fee"].sum())
++    num_trades = int(portfolio["signal"].diff().abs().fillna(0).sum())
++
++    return {
++        "Total Return": f"{total_return:.2%}",
++        "Annual Return": f"{annual_return:.2%}",
++        "Annual Volatility": f"{annual_vol:.2%}",
++        "Sharpe Ratio": f"{sharpe:.3f}",
++        "Max Drawdown": f"{max_drawdown:.2%}",
++        "Win Rate": f"{win_rate:.2%}",
++        "Total Fee Cost": f"{total_fee:.4f}",
++        "Num Trades": num_trades,
++    }
++
++
++def benchmark_buyhold(df: pd.DataFrame) -> pd.DataFrame:
++    """买入持有基准：close-to-close return."""
++    bm = df[["Date", "return_close"]].copy()
++    bm["return_close"] = bm["return_close"].fillna(0.0)
++    bm["cum_return"] = (1 + bm["return_close"]).cumprod() - 1
++    cum_value = 1 + bm["cum_return"]
++    bm["drawdown"] = (cum_value - cum_value.cummax()) / cum_value.cummax()
++    return bm
++
++
++def print_metrics_table(results: dict[str, dict[str, object]]) -> pd.DataFrame:
++    """Print a comparison table for all strategy backtests."""
++    metrics_table = pd.DataFrame(
++        {name: result["metrics"] for name, result in results.items()}
++    ).T
++    print("\n" + "=" * 90)
++    print("BACKTEST PERFORMANCE COMPARISON")
++    print("=" * 90)
++    print(metrics_table.to_string())
++    return metrics_table
++
++
++def run_all_backtests(df: pd.DataFrame) -> dict[str, dict[str, object]]:
++    """Run all strategies with and without transaction fees."""
++    strategies = {
++        "Strategy_A": df["signal_a"],
++        "Strategy_B": df["signal_b"],
++        "Strategy_C": df["signal_c"],
++    }
++
++    results: dict[str, dict[str, object]] = {}
++    for name, signals in strategies.items():
++        for fee in (0.0, FEE_RATE):
++            key = f"{name}_{'w_fee' if fee > 0 else 'no_fee'}"
++            portfolio = run_backtest(df, signals, fee_rate=fee)
++            metrics = calculate_metrics(portfolio)
++            results[key] = {"portfolio": portfolio, "metrics": metrics}
++
++    print_metrics_table(results)
++    return results
++
++
++def plot_cumulative_returns(df: pd.DataFrame, results: dict[str, dict[str, object]]) -> None:
++    """Plot cumulative return curves for all strategies and the benchmark."""
++    benchmark = benchmark_buyhold(df)
++    fig, ax = plt.subplots(figsize=(14, 7))
++
++    color_map = {
++        "Strategy_A": "#1f77b4",
++        "Strategy_B": "#ff7f0e",
++        "Strategy_C": "#2ca02c",
++    }
++
++    ax.plot(
++        benchmark["Date"],
++        benchmark["cum_return"],
++        color="black",
++        linewidth=2,
++        label="Benchmark Buy & Hold",
++    )
++
++    for strategy_name, color in color_map.items():
++        no_fee = results[f"{strategy_name}_no_fee"]["portfolio"]
++        with_fee = results[f"{strategy_name}_w_fee"]["portfolio"]
++        ax.plot(no_fee["Date"], no_fee["cum_return"], color=color, linewidth=2, label=f"{strategy_name} no fee")
++        ax.plot(
++            with_fee["Date"],
++            with_fee["cum_return"],
++            color=color,
++            linewidth=1.8,
++            linestyle="--",
++            label=f"{strategy_name} w/ fee",
++        )
++
++    ax.set_title("Cumulative Returns: All Strategies vs Benchmark")
++    ax.set_xlabel("Date")
++    ax.set_ylabel("Cumulative Return")
++    ax.legend(ncol=2)
++    save_and_close(fig, FIG_CUM_RETURNS)
++
++
++def plot_drawdown(results: dict[str, dict[str, object]]) -> None:
++    """Plot drawdown curves for all strategy variants."""
++    fig, ax = plt.subplots(figsize=(14, 5))
++
++    for name, result in results.items():
++        portfolio = result["portfolio"]
++        linestyle = "--" if name.endswith("w_fee") else "-"
++        ax.plot(portfolio["Date"], portfolio["drawdown"], linewidth=1.5, linestyle=linestyle, label=name)
++
++    ax.set_title("Strategy Drawdown Analysis")
++    ax.set_xlabel("Date")
++    ax.set_ylabel("Drawdown")
++    ax.legend(ncol=2)
++    save_and_close(fig, FIG_DRAWDOWN)
++
++
++def plot_monthly_heatmap(portfolio: pd.DataFrame, title: str = "Monthly Returns Heatmap (Strategy A)") -> None:
++    """Plot a monthly return heatmap for a single strategy portfolio."""
++    monthly = portfolio[["Date", "strategy_return"]].copy()
++    monthly["Date"] = pd.to_datetime(monthly["Date"])
++    monthly = monthly.set_index("Date")
++    monthly_ret = monthly["strategy_return"].resample("ME").sum().to_frame()
++    monthly_ret["Year"] = monthly_ret.index.year
++    monthly_ret["Month"] = monthly_ret.index.month
++    pivot = monthly_ret.pivot(index="Year", columns="Month", values="strategy_return")
++    pivot = pivot.reindex(columns=range(1, 13))
++
++    fig, ax = plt.subplots(figsize=(14, 5))
++    sns.heatmap(pivot, annot=True, fmt=".2%", cmap="RdYlGn", center=0, ax=ax)
++    ax.set_title(title)
++    ax.set_xlabel("Month")
++    ax.set_ylabel("Year")
++    save_and_close(fig, FIG_MONTHLY_HEATMAP)
++
++
++def plot_return_distributions(results: dict[str, dict[str, object]]) -> None:
++    """Plot return histograms for the three no-fee strategy variants."""
++    fig, axes = plt.subplots(1, 3, figsize=(15, 5), sharey=True)
++    strategies = ["Strategy_A", "Strategy_B", "Strategy_C"]
++
++    for i, strategy_name in enumerate(strategies):
++        portfolio = results[f"{strategy_name}_no_fee"]["portfolio"]
++        axes[i].hist(
++            portfolio["strategy_return"].dropna(),
++            bins=50,
++            color="steelblue",
++            alpha=0.75,
++            edgecolor="white",
++        )
++        axes[i].axvline(0, color="red", linestyle="--", linewidth=1)
++        axes[i].set_title(f"{strategy_name} Return Distribution")
++        axes[i].set_xlabel("Daily Return")
++        axes[i].set_ylabel("Frequency")
++
++    save_and_close(fig, FIG_RETURN_DIST)
++
++
++def main() -> None:
++    input_path = Path(INPUT_FILE)
++    if not input_path.exists():
++        raise FileNotFoundError(
++            f"Input file not found: {input_path.resolve()}. "
++            "Run task_002_feature_engineering.py first to generate hsi_features.csv."
++        )
++
++    configure_plot_style()
++    df = load_data(str(input_path))
++    validate_columns(df)
++    df = ensure_signals(df)
++
++    results = run_all_backtests(df)
++    plot_cumulative_returns(df, results)
++    plot_drawdown(results)
++    plot_monthly_heatmap(results["Strategy_A_no_fee"]["portfolio"])
++    plot_return_distributions(results)
++
++
++if __name__ == "__main__":
++    main()
+
+codex
+模块已写完，接下来做本地验证：先确认数据文件是否存在，再跑一次脚本或至少做语法编译，检查是否有接口或绘图问题。
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command 'python -m py_compile task_007_backtest.py' in C:\Coding\AI-factory-projects\quantitative-research-workflow\codeexec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command 'Get-ChildItem | Where-Object { $_.Name -in @('"'hsi_features.csv','hsi_clean.csv','HSI.xlsx','task_007_backtest.py') } | Format-Table Name,Length,LastWriteTime" in C:\Coding\AI-factory-projects\quantitative-research-workflow\code succeeded in 483ms:
+
+ succeeded in 490ms:
+
+Name                 Length LastWriteTime    
+----                 ------ -------------    
+task_007_backtest.py  10539 2026/3/12 1:19:11
+
+
+file update:
+diff --git a/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_007_backtest.py b/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_007_backtest.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..7687e28c998b5781563c4e7ea6909d0bfb2e0c79
+--- /dev/null
++++ b/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_007_backtest.py
+@@ -0,0 +1,301 @@
++from pathlib import Path
++
++import matplotlib.pyplot as plt
++import numpy as np
++import pandas as pd
++import seaborn as sns
++
++from task_006_strategy_design import SIGNAL_COLUMNS, generate_all_signals
++
++
++INPUT_FILE = "hsi_features.csv"
++FEE_RATE = 0.001
++ANNUAL_FACTOR = 252
++REQUIRED_COLUMNS = {"Date", "return_open", "return_close"}
++FIG_CUM_RETURNS = "fig_10_cum_returns.png"
++FIG_DRAWDOWN = "fig_11_drawdown.png"
++FIG_MONTHLY_HEATMAP = "fig_12_monthly_heatmap.png"
++FIG_RETURN_DIST = "fig_13_return_dist.png"
++
++
++def load_data(file_path: str) -> pd.DataFrame:
++    """Load feature data and enforce chronological order."""
++    print(f"Loading feature data from {file_path}...")
++    df = pd.read_csv(file_path)
++    if "Date" in df.columns:
++        df["Date"] = pd.to_datetime(df["Date"])
++        df = df.sort_values("Date").reset_index(drop=True)
++    print("Feature data loaded.")
++    return df
++
++
++def validate_columns(df: pd.DataFrame) -> None:
++    """Validate that all base columns required for backtesting exist."""
++    missing_columns = REQUIRED_COLUMNS.difference(df.columns)
++    if missing_columns:
++        missing_str = ", ".join(sorted(missing_columns))
++        raise ValueError(f"Missing required columns: {missing_str}")
++
++
++def ensure_signals(df: pd.DataFrame) -> pd.DataFrame:
++    """Generate strategy signals if they are not already present."""
++    if set(SIGNAL_COLUMNS).issubset(df.columns):
++        return df.copy()
++    return generate_all_signals(df)
++
++
++def configure_plot_style() -> None:
++    """Apply a consistent plotting style across all charts."""
++    sns.set_style("whitegrid")
++    plt.rcParams["figure.figsize"] = (12, 6)
++    plt.rcParams["axes.titlesize"] = 14
++    plt.rcParams["axes.labelsize"] = 11
++    plt.rcParams["legend.fontsize"] = 10
++
++
++def save_and_close(fig: plt.Figure, output_path: str) -> None:
++    """Save figure to disk and release matplotlib memory."""
++    fig.tight_layout()
++    fig.savefig(output_path, dpi=150, bbox_inches="tight")
++    plt.close(fig)
++    print(f"Saved {output_path}")
++
++
++def run_backtest(df: pd.DataFrame, signals: pd.Series, fee_rate: float = 0.0) -> pd.DataFrame:
++    """
++    矢量化回测引擎
++
++    Parameters
++    ----------
++    df : DataFrame
++        Must include Date and return_open columns.
++    signals : Series
++        Values in {1, -1, 0}.
++    fee_rate : float
++        Single-side fee rate.
++
++    Returns
++    -------
++    DataFrame
++        Portfolio path with daily return, cumulative return, fee, and drawdown.
++    """
++    portfolio = df[["Date", "return_open"]].copy()
++    portfolio["signal"] = pd.Series(signals, index=df.index).fillna(0).astype("int64")
++    portfolio["strategy_return"] = portfolio["signal"] * portfolio["return_open"].fillna(0.0)
++
++    if fee_rate > 0:
++        position_change = portfolio["signal"].diff().abs().fillna(0)
++        portfolio["fee"] = position_change * fee_rate
++        portfolio["strategy_return"] = portfolio["strategy_return"] - portfolio["fee"]
++    else:
++        portfolio["fee"] = 0.0
++
++    portfolio["daily_return"] = portfolio["strategy_return"]
++
++    cum_value = (1 + portfolio["strategy_return"]).cumprod()
++    portfolio["cum_return"] = cum_value - 1
++    rolling_max = cum_value.cummax()
++    portfolio["drawdown"] = (cum_value - rolling_max) / rolling_max
++
++    return portfolio
++
++
++def calculate_metrics(portfolio: pd.DataFrame, annual_factor: int = ANNUAL_FACTOR) -> dict[str, str | int]:
++    """Calculate a full set of formatted performance metrics."""
++    returns = portfolio["strategy_return"].dropna()
++    if returns.empty:
++        return {
++            "Total Return": "0.00%",
++            "Annual Return": "0.00%",
++            "Annual Volatility": "0.00%",
++            "Sharpe Ratio": "0.000",
++            "Max Drawdown": "0.00%",
++            "Win Rate": "0.00%",
++            "Total Fee Cost": "0.0000",
++            "Num Trades": 0,
++        }
++
++    total_return = (1 + returns).prod() - 1
++    n_years = len(returns) / annual_factor
++    annual_return = (1 + total_return) ** (1 / n_years) - 1 if n_years > 0 else 0.0
++    annual_vol = returns.std() * np.sqrt(annual_factor)
++    sharpe = annual_return / annual_vol if annual_vol > 0 else 0.0
++    max_drawdown = portfolio["drawdown"].min()
++
++    active_days = (returns != 0).sum()
++    win_rate = (returns > 0).sum() / active_days if active_days > 0 else 0.0
++    total_fee = float(portfolio["fee"].sum())
++    num_trades = int(portfolio["signal"].diff().abs().fillna(0).sum())
++
++    return {
++        "Total Return": f"{total_return:.2%}",
++        "Annual Return": f"{annual_return:.2%}",
++        "Annual Volatility": f"{annual_vol:.2%}",
++        "Sharpe Ratio": f"{sharpe:.3f}",
++        "Max Drawdown": f"{max_drawdown:.2%}",
++        "Win Rate": f"{win_rate:.2%}",
++        "Total Fee Cost": f"{total_fee:.4f}",
++        "Num Trades": num_trades,
++    }
++
++
++def benchmark_buyhold(df: pd.DataFrame) -> pd.DataFrame:
++    """买入持有基准：close-to-close return."""
++    bm = df[["Date", "return_close"]].copy()
++    bm["return_close"] = bm["return_close"].fillna(0.0)
++    bm["cum_return"] = (1 + bm["return_close"]).cumprod() - 1
++    cum_value = 1 + bm["cum_return"]
++    bm["drawdown"] = (cum_value - cum_value.cummax()) / cum_value.cummax()
++    return bm
++
++
++def print_metrics_table(results: dict[str, dict[str, object]]) -> pd.DataFrame:
++    """Print a comparison table for all strategy backtests."""
++    metrics_table = pd.DataFrame(
++        {name: result["metrics"] for name, result in results.items()}
++    ).T
++    print("\n" + "=" * 90)
++    print("BACKTEST PERFORMANCE COMPARISON")
++    print("=" * 90)
++    print(metrics_table.to_string())
++    return metrics_table
++
++
++def run_all_backtests(df: pd.DataFrame) -> dict[str, dict[str, object]]:
++    """Run all strategies with and without transaction fees."""
++    strategies = {
++        "Strategy_A": df["signal_a"],
++        "Strategy_B": df["signal_b"],
++        "Strategy_C": df["signal_c"],
++    }
++
++    results: dict[str, dict[str, object]] = {}
++    for name, signals in strategies.items():
++        for fee in (0.0, FEE_RATE):
++            key = f"{name}_{'w_fee' if fee > 0 else 'no_fee'}"
++            portfolio = run_backtest(df, signals, fee_rate=fee)
++            metrics = calculate_metrics(portfolio)
++            results[key] = {"portfolio": portfolio, "metrics": metrics}
++
++    print_metrics_table(results)
++    return results
++
++
++def plot_cumulative_returns(df: pd.DataFrame, results: dict[str, dict[str, object]]) -> None:
++    """Plot cumulative return curves for all strategies and the benchmark."""
++    benchmark = benchmark_buyhold(df)
++    fig, ax = plt.subplots(figsize=(14, 7))
++
++    color_map = {
++        "Strategy_A": "#1f77b4",
++        "Strategy_B": "#ff7f0e",
++        "Strategy_C": "#2ca02c",
++    }
++
++    ax.plot(
++        benchmark["Date"],
++        benchmark["cum_return"],
++        color="black",
++        linewidth=2,
++        label="Benchmark Buy & Hold",
++    )
++
++    for strategy_name, color in color_map.items():
++        no_fee = results[f"{strategy_name}_no_fee"]["portfolio"]
++        with_fee = results[f"{strategy_name}_w_fee"]["portfolio"]
++        ax.plot(no_fee["Date"], no_fee["cum_return"], color=color, linewidth=2, label=f"{strategy_name} no fee")
++        ax.plot(
++            with_fee["Date"],
++            with_fee["cum_return"],
++            color=color,
++            linewidth=1.8,
++            linestyle="--",
++            label=f"{strategy_name} w/ fee",
++        )
++
++    ax.set_title("Cumulative Returns: All Strategies vs Benchmark")
++    ax.set_xlabel("Date")
++    ax.set_ylabel("Cumulative Return")
++    ax.legend(ncol=2)
++    save_and_close(fig, FIG_CUM_RETURNS)
++
++
++def plot_drawdown(results: dict[str, dict[str, object]]) -> None:
++    """Plot drawdown curves for all strategy variants."""
++    fig, ax = plt.subplots(figsize=(14, 5))
++
++    for name, result in results.items():
++        portfolio = result["portfolio"]
++        linestyle = "--" if name.endswith("w_fee") else "-"
++        ax.plot(portfolio["Date"], portfolio["drawdown"], linewidth=1.5, linestyle=linestyle, label=name)
++
++    ax.set_title("Strategy Drawdown Analysis")
++    ax.set_xlabel("Date")
++    ax.set_ylabel("Drawdown")
++    ax.legend(ncol=2)
++    save_and_close(fig, FIG_DRAWDOWN)
++
++
++def plot_monthly_heatmap(portfolio: pd.DataFrame, title: str = "Monthly Returns Heatmap (Strategy A)") -> None:
++    """Plot a monthly return heatmap for a single strategy portfolio."""
++    monthly = portfolio[["Date", "strategy_return"]].copy()
++    monthly["Date"] = pd.to_datetime(monthly["Date"])
++    monthly = monthly.set_index("Date")
++    monthly_ret = monthly["strategy_return"].resample("ME").sum().to_frame()
++    monthly_ret["Year"] = monthly_ret.index.year
++    monthly_ret["Month"] = monthly_ret.index.month
++    pivot = monthly_ret.pivot(index="Year", columns="Month", values="strategy_return")
++    pivot = pivot.reindex(columns=range(1, 13))
++
++    fig, ax = plt.subplots(figsize=(14, 5))
++    sns.heatmap(pivot, annot=True, fmt=".2%", cmap="RdYlGn", center=0, ax=ax)
++    ax.set_title(title)
++    ax.set_xlabel("Month")
++    ax.set_ylabel("Year")
++    save_and_close(fig, FIG_MONTHLY_HEATMAP)
++
++
++def plot_return_distributions(results: dict[str, dict[str, object]]) -> None:
++    """Plot return histograms for the three no-fee strategy variants."""
++    fig, axes = plt.subplots(1, 3, figsize=(15, 5), sharey=True)
++    strategies = ["Strategy_A", "Strategy_B", "Strategy_C"]
++
++    for i, strategy_name in enumerate(strategies):
++        portfolio = results[f"{strategy_name}_no_fee"]["portfolio"]
++        axes[i].hist(
++            portfolio["strategy_return"].dropna(),
++            bins=50,
++            color="steelblue",
++            alpha=0.75,
++            edgecolor="white",
++        )
++        axes[i].axvline(0, color="red", linestyle="--", linewidth=1)
++        axes[i].set_title(f"{strategy_name} Return Distribution")
++        axes[i].set_xlabel("Daily Return")
++        axes[i].set_ylabel("Frequency")
++
++    save_and_close(fig, FIG_RETURN_DIST)
++
++
++def main() -> None:
++    input_path = Path(INPUT_FILE)
++    if not input_path.exists():
++        raise FileNotFoundError(
++            f"Input file not found: {input_path.resolve()}. "
++            "Run task_002_feature_engineering.py first to generate hsi_features.csv."
++        )
++
++    configure_plot_style()
++    df = load_data(str(input_path))
++    validate_columns(df)
++    df = ensure_signals(df)
++
++    results = run_all_backtests(df)
++    plot_cumulative_returns(df, results)
++    plot_drawdown(results)
++    plot_monthly_heatmap(results["Strategy_A_no_fee"]["portfolio"])
++    plot_return_distributions(results)
++
++
++if __name__ == "__main__":
++    main()
+
+codex
+已新增回测模块 [task_007_backtest.py](C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_007_backtest.py)。
+
+这个脚本实现了矢量化回测引擎、8 项绩效指标、买入持有基准、`3 x 2 = 6` 组策略回测，以及 4 张图的生成。信号逻辑直接复用了 [task_006_strategy_design.py](C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_006_strategy_design.py) 里的实现；如果输入文件里还没有 `signal_a/signal_b/signal_c`，脚本会自动补齐。
+
+已完成的本地验证只有语法编译：`python -m py_compile task_007_backtest.py` 通过。当前工作目录里没有 `hsi_features.csv`，所以我没法实际跑出 6 组回测结果和 4 张图；把该文件放到 `code/` 后直接运行 `python task_007_backtest.py` 即可生成输出。
+file update:
+diff --git a/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_007_backtest.py b/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_007_backtest.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..7687e28c998b5781563c4e7ea6909d0bfb2e0c79
+--- /dev/null
++++ b/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_007_backtest.py
+@@ -0,0 +1,301 @@
++from pathlib import Path
++
++import matplotlib.pyplot as plt
++import numpy as np
++import pandas as pd
++import seaborn as sns
++
++from task_006_strategy_design import SIGNAL_COLUMNS, generate_all_signals
++
++
++INPUT_FILE = "hsi_features.csv"
++FEE_RATE = 0.001
++ANNUAL_FACTOR = 252
++REQUIRED_COLUMNS = {"Date", "return_open", "return_close"}
++FIG_CUM_RETURNS = "fig_10_cum_returns.png"
++FIG_DRAWDOWN = "fig_11_drawdown.png"
++FIG_MONTHLY_HEATMAP = "fig_12_monthly_heatmap.png"
++FIG_RETURN_DIST = "fig_13_return_dist.png"
++
++
++def load_data(file_path: str) -> pd.DataFrame:
++    """Load feature data and enforce chronological order."""
++    print(f"Loading feature data from {file_path}...")
++    df = pd.read_csv(file_path)
++    if "Date" in df.columns:
++        df["Date"] = pd.to_datetime(df["Date"])
++        df = df.sort_values("Date").reset_index(drop=True)
++    print("Feature data loaded.")
++    return df
++
++
++def validate_columns(df: pd.DataFrame) -> None:
++    """Validate that all base columns required for backtesting exist."""
++    missing_columns = REQUIRED_COLUMNS.difference(df.columns)
++    if missing_columns:
++        missing_str = ", ".join(sorted(missing_columns))
++        raise ValueError(f"Missing required columns: {missing_str}")
++
++
++def ensure_signals(df: pd.DataFrame) -> pd.DataFrame:
++    """Generate strategy signals if they are not already present."""
++    if set(SIGNAL_COLUMNS).issubset(df.columns):
++        return df.copy()
++    return generate_all_signals(df)
++
++
++def configure_plot_style() -> None:
++    """Apply a consistent plotting style across all charts."""
++    sns.set_style("whitegrid")
++    plt.rcParams["figure.figsize"] = (12, 6)
++    plt.rcParams["axes.titlesize"] = 14
++    plt.rcParams["axes.labelsize"] = 11
++    plt.rcParams["legend.fontsize"] = 10
++
++
++def save_and_close(fig: plt.Figure, output_path: str) -> None:
++    """Save figure to disk and release matplotlib memory."""
++    fig.tight_layout()
++    fig.savefig(output_path, dpi=150, bbox_inches="tight")
++    plt.close(fig)
++    print(f"Saved {output_path}")
++
++
++def run_backtest(df: pd.DataFrame, signals: pd.Series, fee_rate: float = 0.0) -> pd.DataFrame:
++    """
++    矢量化回测引擎
++
++    Parameters
++    ----------
++    df : DataFrame
++        Must include Date and return_open columns.
++    signals : Series
++        Values in {1, -1, 0}.
++    fee_rate : float
++        Single-side fee rate.
++
++    Returns
++    -------
++    DataFrame
++        Portfolio path with daily return, cumulative return, fee, and drawdown.
++    """
++    portfolio = df[["Date", "return_open"]].copy()
++    portfolio["signal"] = pd.Series(signals, index=df.index).fillna(0).astype("int64")
++    portfolio["strategy_return"] = portfolio["signal"] * portfolio["return_open"].fillna(0.0)
++
++    if fee_rate > 0:
++        position_change = portfolio["signal"].diff().abs().fillna(0)
++        portfolio["fee"] = position_change * fee_rate
++        portfolio["strategy_return"] = portfolio["strategy_return"] - portfolio["fee"]
++    else:
++        portfolio["fee"] = 0.0
++
++    portfolio["daily_return"] = portfolio["strategy_return"]
++
++    cum_value = (1 + portfolio["strategy_return"]).cumprod()
++    portfolio["cum_return"] = cum_value - 1
++    rolling_max = cum_value.cummax()
++    portfolio["drawdown"] = (cum_value - rolling_max) / rolling_max
++
++    return portfolio
++
++
++def calculate_metrics(portfolio: pd.DataFrame, annual_factor: int = ANNUAL_FACTOR) -> dict[str, str | int]:
++    """Calculate a full set of formatted performance metrics."""
++    returns = portfolio["strategy_return"].dropna()
++    if returns.empty:
++        return {
++            "Total Return": "0.00%",
++            "Annual Return": "0.00%",
++            "Annual Volatility": "0.00%",
++            "Sharpe Ratio": "0.000",
++            "Max Drawdown": "0.00%",
++            "Win Rate": "0.00%",
++            "Total Fee Cost": "0.0000",
++            "Num Trades": 0,
++        }
++
++    total_return = (1 + returns).prod() - 1
++    n_years = len(returns) / annual_factor
++    annual_return = (1 + total_return) ** (1 / n_years) - 1 if n_years > 0 else 0.0
++    annual_vol = returns.std() * np.sqrt(annual_factor)
++    sharpe = annual_return / annual_vol if annual_vol > 0 else 0.0
++    max_drawdown = portfolio["drawdown"].min()
++
++    active_days = (returns != 0).sum()
++    win_rate = (returns > 0).sum() / active_days if active_days > 0 else 0.0
++    total_fee = float(portfolio["fee"].sum())
++    num_trades = int(portfolio["signal"].diff().abs().fillna(0).sum())
++
++    return {
++        "Total Return": f"{total_return:.2%}",
++        "Annual Return": f"{annual_return:.2%}",
++        "Annual Volatility": f"{annual_vol:.2%}",
++        "Sharpe Ratio": f"{sharpe:.3f}",
++        "Max Drawdown": f"{max_drawdown:.2%}",
++        "Win Rate": f"{win_rate:.2%}",
++        "Total Fee Cost": f"{total_fee:.4f}",
++        "Num Trades": num_trades,
++    }
++
++
++def benchmark_buyhold(df: pd.DataFrame) -> pd.DataFrame:
++    """买入持有基准：close-to-close return."""
++    bm = df[["Date", "return_close"]].copy()
++    bm["return_close"] = bm["return_close"].fillna(0.0)
++    bm["cum_return"] = (1 + bm["return_close"]).cumprod() - 1
++    cum_value = 1 + bm["cum_return"]
++    bm["drawdown"] = (cum_value - cum_value.cummax()) / cum_value.cummax()
++    return bm
++
++
++def print_metrics_table(results: dict[str, dict[str, object]]) -> pd.DataFrame:
++    """Print a comparison table for all strategy backtests."""
++    metrics_table = pd.DataFrame(
++        {name: result["metrics"] for name, result in results.items()}
++    ).T
++    print("\n" + "=" * 90)
++    print("BACKTEST PERFORMANCE COMPARISON")
++    print("=" * 90)
++    print(metrics_table.to_string())
++    return metrics_table
++
++
++def run_all_backtests(df: pd.DataFrame) -> dict[str, dict[str, object]]:
++    """Run all strategies with and without transaction fees."""
++    strategies = {
++        "Strategy_A": df["signal_a"],
++        "Strategy_B": df["signal_b"],
++        "Strategy_C": df["signal_c"],
++    }
++
++    results: dict[str, dict[str, object]] = {}
++    for name, signals in strategies.items():
++        for fee in (0.0, FEE_RATE):
++            key = f"{name}_{'w_fee' if fee > 0 else 'no_fee'}"
++            portfolio = run_backtest(df, signals, fee_rate=fee)
++            metrics = calculate_metrics(portfolio)
++            results[key] = {"portfolio": portfolio, "metrics": metrics}
++
++    print_metrics_table(results)
++    return results
++
++
++def plot_cumulative_returns(df: pd.DataFrame, results: dict[str, dict[str, object]]) -> None:
++    """Plot cumulative return curves for all strategies and the benchmark."""
++    benchmark = benchmark_buyhold(df)
++    fig, ax = plt.subplots(figsize=(14, 7))
++
++    color_map = {
++        "Strategy_A": "#1f77b4",
++        "Strategy_B": "#ff7f0e",
++        "Strategy_C": "#2ca02c",
++    }
++
++    ax.plot(
++        benchmark["Date"],
++        benchmark["cum_return"],
++        color="black",
++        linewidth=2,
++        label="Benchmark Buy & Hold",
++    )
++
++    for strategy_name, color in color_map.items():
++        no_fee = results[f"{strategy_name}_no_fee"]["portfolio"]
++        with_fee = results[f"{strategy_name}_w_fee"]["portfolio"]
++        ax.plot(no_fee["Date"], no_fee["cum_return"], color=color, linewidth=2, label=f"{strategy_name} no fee")
++        ax.plot(
++            with_fee["Date"],
++            with_fee["cum_return"],
++            color=color,
++            linewidth=1.8,
++            linestyle="--",
++            label=f"{strategy_name} w/ fee",
++        )
++
++    ax.set_title("Cumulative Returns: All Strategies vs Benchmark")
++    ax.set_xlabel("Date")
++    ax.set_ylabel("Cumulative Return")
++    ax.legend(ncol=2)
++    save_and_close(fig, FIG_CUM_RETURNS)
++
++
++def plot_drawdown(results: dict[str, dict[str, object]]) -> None:
++    """Plot drawdown curves for all strategy variants."""
++    fig, ax = plt.subplots(figsize=(14, 5))
++
++    for name, result in results.items():
++        portfolio = result["portfolio"]
++        linestyle = "--" if name.endswith("w_fee") else "-"
++        ax.plot(portfolio["Date"], portfolio["drawdown"], linewidth=1.5, linestyle=linestyle, label=name)
++
++    ax.set_title("Strategy Drawdown Analysis")
++    ax.set_xlabel("Date")
++    ax.set_ylabel("Drawdown")
++    ax.legend(ncol=2)
++    save_and_close(fig, FIG_DRAWDOWN)
++
++
++def plot_monthly_heatmap(portfolio: pd.DataFrame, title: str = "Monthly Returns Heatmap (Strategy A)") -> None:
++    """Plot a monthly return heatmap for a single strategy portfolio."""
++    monthly = portfolio[["Date", "strategy_return"]].copy()
++    monthly["Date"] = pd.to_datetime(monthly["Date"])
++    monthly = monthly.set_index("Date")
++    monthly_ret = monthly["strategy_return"].resample("ME").sum().to_frame()
++    monthly_ret["Year"] = monthly_ret.index.year
++    monthly_ret["Month"] = monthly_ret.index.month
++    pivot = monthly_ret.pivot(index="Year", columns="Month", values="strategy_return")
++    pivot = pivot.reindex(columns=range(1, 13))
++
++    fig, ax = plt.subplots(figsize=(14, 5))
++    sns.heatmap(pivot, annot=True, fmt=".2%", cmap="RdYlGn", center=0, ax=ax)
++    ax.set_title(title)
++    ax.set_xlabel("Month")
++    ax.set_ylabel("Year")
++    save_and_close(fig, FIG_MONTHLY_HEATMAP)
++
++
++def plot_return_distributions(results: dict[str, dict[str, object]]) -> None:
++    """Plot return histograms for the three no-fee strategy variants."""
++    fig, axes = plt.subplots(1, 3, figsize=(15, 5), sharey=True)
++    strategies = ["Strategy_A", "Strategy_B", "Strategy_C"]
++
++    for i, strategy_name in enumerate(strategies):
++        portfolio = results[f"{strategy_name}_no_fee"]["portfolio"]
++        axes[i].hist(
++            portfolio["strategy_return"].dropna(),
++            bins=50,
++            color="steelblue",
++            alpha=0.75,
++            edgecolor="white",
++        )
++        axes[i].axvline(0, color="red", linestyle="--", linewidth=1)
++        axes[i].set_title(f"{strategy_name} Return Distribution")
++        axes[i].set_xlabel("Daily Return")
++        axes[i].set_ylabel("Frequency")
++
++    save_and_close(fig, FIG_RETURN_DIST)
++
++
++def main() -> None:
++    input_path = Path(INPUT_FILE)
++    if not input_path.exists():
++        raise FileNotFoundError(
++            f"Input file not found: {input_path.resolve()}. "
++            "Run task_002_feature_engineering.py first to generate hsi_features.csv."
++        )
++
++    configure_plot_style()
++    df = load_data(str(input_path))
++    validate_columns(df)
++    df = ensure_signals(df)
++
++    results = run_all_backtests(df)
++    plot_cumulative_returns(df, results)
++    plot_drawdown(results)
++    plot_monthly_heatmap(results["Strategy_A_no_fee"]["portfolio"])
++    plot_return_distributions(results)
++
++
++if __name__ == "__main__":
++    main()
+
+tokens used
+19,521
+已新增回测模块 [task_007_backtest.py](C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_007_backtest.py)。
+
+这个脚本实现了矢量化回测引擎、8 项绩效指标、买入持有基准、`3 x 2 = 6` 组策略回测，以及 4 张图的生成。信号逻辑直接复用了 [task_006_strategy_design.py](C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_006_strategy_design.py) 里的实现；如果输入文件里还没有 `signal_a/signal_b/signal_c`，脚本会自动补齐。
+
+已完成的本地验证只有语法编译：`python -m py_compile task_007_backtest.py` 通过。当前工作目录里没有 `hsi_features.csv`，所以我没法实际跑出 6 组回测结果和 4 张图；把该文件放到 `code/` 后直接运行 `python task_007_backtest.py` 即可生成输出。

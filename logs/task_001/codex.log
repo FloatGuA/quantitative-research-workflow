@@ -1,0 +1,761 @@
+# Codex Log: Task 001 - Data Loading
+
+## Prompt
+
+# Task 001 — 数据加载与清洗
+
+## 目标
+实现 HSI 数据的加载、清洗和基础统计分析，为后续所有分析提供干净的数据基础。
+
+## 工作目录
+`code/`
+
+## 输出文件
+- `task_001_data_loading.py` — 数据加载与清洗模块
+
+## 详细要求
+
+### 1. 数据加载
+```python
+import pandas as pd
+import numpy as np
+
+# 加载 HSI.xlsx
+df = pd.read_excel('HSI.xlsx')
+
+# 解析日期列，按时间排序
+df['Date'] = pd.to_datetime(df['Date'])
+df = df.sort_values('Date').reset_index(drop=True)
+```
+
+### 2. 数据检测
+检测并打印以下信息：
+- 数据形状（行数、列数）
+- 各列数据类型
+- 缺失值数量（每列）
+- 重复行数量
+- `Up votes + Down votes != 1` 的异常行数量（允许 1e-6 误差）
+
+```python
+# 检测情绪数据异常
+df['vote_sum'] = df['Up votes'] + df['Down votes']
+df['vote_anomaly'] = (df['vote_sum'] - 1).abs() > 1e-6
+anomaly_count = df['vote_anomaly'].sum()
+print(f"Vote sum anomaly rows: {anomaly_count}")
+```
+
+### 3. 数据清洗
+- 对 `Up votes` 和 `Down votes` 使用 forward fill（`ffill`）填充缺失值
+- **不使用 backward fill**（避免未来信息泄漏）
+- 保留 `vote_anomaly` 标注列，不删除异常行
+
+```python
+df['Up votes'] = df['Up votes'].fillna(method='ffill')
+df['Down votes'] = df['Down votes'].fillna(method='ffill')
+```
+
+### 4. 基础统计摘要
+输出所有数值列的：均值、标准差、最小值、25%/50%/75% 分位数、最大值
+
+```python
+summary = df[['Open', 'High', 'Low', 'Close', 'Up votes', 'Down votes']].describe()
+print(summary)
+```
+
+### 5. 保存清洗后数据
+```python
+df.to_csv('hsi_clean.csv', index=False)
+print("Clean data saved to hsi_clean.csv")
+print(f"Final shape: {df.shape}")
+```
+
+## 代码规范
+- 使用 Python 函数封装各步骤
+- 每个关键步骤添加 print 输出，便于 Notebook 展示
+- 文件末尾添加 `if __name__ == '__main__': main()` 入口
+
+## 验收标准
+- [ ] 正确加载 HSI.xlsx，747 行左右
+- [ ] 正确检测 195 条情绪缺失记录
+- [ ] forward fill 正确执行，无剩余 NaN（在情绪列）
+- [ ] 异常行被标注（不删除）
+- [ ] 统计摘要输出完整
+
+<!-- FACTORY:DONE -->
+
+
+## Output
+
+OpenAI Codex v0.111.0 (research preview)
+--------
+workdir: C:\Coding\AI-factory-projects\quantitative-research-workflow\code
+model: gpt-5.4
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, C:\Users\86579\.codex\memories]
+reasoning effort: none
+reasoning summaries: none
+session id: 019cdde0-7684-7100-9008-2d592f6c4e3b
+--------
+user
+# Task 001 — 数据加载与清洗
+
+## 目标
+实现 HSI 数据的加载、清洗和基础统计分析，为后续所有分析提供干净的数据基础。
+
+## 工作目录
+`code/`
+
+## 输出文件
+- `task_001_data_loading.py` — 数据加载与清洗模块
+
+## 详细要求
+
+### 1. 数据加载
+```python
+import pandas as pd
+import numpy as np
+
+# 加载 HSI.xlsx
+df = pd.read_excel('HSI.xlsx')
+
+# 解析日期列，按时间排序
+df['Date'] = pd.to_datetime(df['Date'])
+df = df.sort_values('Date').reset_index(drop=True)
+```
+
+### 2. 数据检测
+检测并打印以下信息：
+- 数据形状（行数、列数）
+- 各列数据类型
+- 缺失值数量（每列）
+- 重复行数量
+- `Up votes + Down votes != 1` 的异常行数量（允许 1e-6 误差）
+
+```python
+# 检测情绪数据异常
+df['vote_sum'] = df['Up votes'] + df['Down votes']
+df['vote_anomaly'] = (df['vote_sum'] - 1).abs() > 1e-6
+anomaly_count = df['vote_anomaly'].sum()
+print(f"Vote sum anomaly rows: {anomaly_count}")
+```
+
+### 3. 数据清洗
+- 对 `Up votes` 和 `Down votes` 使用 forward fill（`ffill`）填充缺失值
+- **不使用 backward fill**（避免未来信息泄漏）
+- 保留 `vote_anomaly` 标注列，不删除异常行
+
+```python
+df['Up votes'] = df['Up votes'].fillna(method='ffill')
+df['Down votes'] = df['Down votes'].fillna(method='ffill')
+```
+
+### 4. 基础统计摘要
+输出所有数值列的：均值、标准差、最小值、25%/50%/75% 分位数、最大值
+
+```python
+summary = df[['Open', 'High', 'Low', 'Close', 'Up votes', 'Down votes']].describe()
+print(summary)
+```
+
+### 5. 保存清洗后数据
+```python
+df.to_csv('hsi_clean.csv', index=False)
+print("Clean data saved to hsi_clean.csv")
+print(f"Final shape: {df.shape}")
+```
+
+## 代码规范
+- 使用 Python 函数封装各步骤
+- 每个关键步骤添加 print 输出，便于 Notebook 展示
+- 文件末尾添加 `if __name__ == '__main__': main()` 入口
+
+## 验收标准
+- [ ] 正确加载 HSI.xlsx，747 行左右
+- [ ] 正确检测 195 条情绪缺失记录
+- [ ] forward fill 正确执行，无剩余 NaN（在情绪列）
+- [ ] 异常行被标注（不删除）
+- [ ] 统计摘要输出完整
+
+<!-- FACTORY:DONE -->
+
+mcp startup: no servers
+codex
+我会先检查当前工作目录里的数据文件和现有代码结构，确认 `HSI.xlsx` 路径、命名习惯和是否已有相关脚本，然后直接实现 `task_001_data_loading.py` 并做一次本地运行验证。
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command 'rg --files' in C:\Coding\AI-factory-projects\quantitative-research-workflow\codeexec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command 'Get-ChildItem -Force' in C:\Coding\AI-factory-projects\quantitative-research-workflow\code succeeded in 592ms:
+
+ exited 1 in 1.06s:
+
+codex
+目录信息还不够明确，`rg` 似乎不可用，我改用 PowerShell 直接列出文件并定位 `HSI.xlsx`，同时检查是否已经有同名任务脚本。
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command 'Get-ChildItem -Force | Format-Table -AutoSize Name,Length,Mode' in C:\Coding\AI-factory-projects\quantitative-research-workflow\codeexec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command 'Get-ChildItem -Recurse -File | Select-Object -ExpandProperty FullName' in C:\Coding\AI-factory-projects\quantitative-research-workflow\code succeeded in 318ms:
+
+ succeeded in 329ms:
+
+codex
+当前 `code/` 目录看起来是空的，至少没有列出任何现有文件。我会直接创建任务脚本，按要求把加载、检测、清洗、统计和保存拆成函数；如果本地没有 `HSI.xlsx`，我只能先做静态实现并在运行时给出明确错误。
+file update
+A C:\Coding\AI-factory-projects\quantitative-research-workflow\code\task_001_data_loading.py
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+
+
+DATA_FILE = "HSI.xlsx"
+OUTPUT_FILE = "hsi_clean.csv"
+VOTE_TOLERANCE = 1e-6
+SUMMARY_COLUMNS = ["Open", "High", "Low", "Close", "Up votes", "Down votes"]
+
+
+def load_data(file_path: str) -> pd.DataFrame:
+    print(f"Loading data from {file_path}...")
+    df = pd.read_excel(file_path)
+    df["Date"] = pd.to_datetime(df["Date"])
+    df = df.sort_values("Date").reset_index(drop=True)
+    print("Data loaded and sorted by Date.")
+    return df
+
+
+def inspect_data(df: pd.DataFrame) -> pd.DataFrame:
+    print("\n=== Data Inspection ===")
+    print(f"Shape: {df.shape}")
+    print("\nColumn dtypes:")
+    print(df.dtypes)
+
+    print("\nMissing values by column:")
+    print(df.isna().sum())
+
+    duplicate_count = df.duplicated().sum()
+    print(f"\nDuplicate rows: {duplicate_count}")
+
+    df = df.copy()
+    df["vote_sum"] = df["Up votes"] + df["Down votes"]
+    df["vote_anomaly"] = (df["vote_sum"] - 1).abs() > VOTE_TOLERANCE
+    anomaly_count = int(df["vote_anomaly"].sum())
+    print(f"Vote sum anomaly rows: {anomaly_count}")
+    return df
+
+
+def clean_data(df: pd.DataFrame) -> pd.DataFrame:
+    print("\n=== Data Cleaning ===")
+    df = df.copy()
+
+    before_missing = df[["Up votes", "Down votes"]].isna().sum()
+    print("Missing sentiment values before forward fill:")
+    print(before_missing)
+
+    df["Up votes"] = df["Up votes"].ffill()
+    df["Down votes"] = df["Down votes"].ffill()
+
+    after_missing = df[["Up votes", "Down votes"]].isna().sum()
+    print("\nMissing sentiment values after forward fill:")
+    print(after_missing)
+
+    remaining_nans = int(after_missing.sum())
+    print(f"Remaining NaN in sentiment columns: {remaining_nans}")
+    return df
+
+
+def summarize_data(df: pd.DataFrame) -> pd.DataFrame:
+    print("\n=== Summary Statistics ===")
+    available_columns = [column for column in SUMMARY_COLUMNS if column in df.columns]
+    if not available_columns:
+        raise ValueError("No expected numeric columns found for summary statistics.")
+
+    summary = df[available_columns].describe()
+    print(summary)
+    return summary
+
+
+def save_data(df: pd.DataFrame, output_path: str) -> None:
+    print("\n=== Save Clean Data ===")
+    df.to_csv(output_path, index=False)
+    print(f"Clean data saved to {output_path}")
+    print(f"Final shape: {df.shape}")
+
+
+def main() -> None:
+    data_path = Path(DATA_FILE)
+    if not data_path.exists():
+        raise FileNotFoundError(
+            f"Input file not found: {data_path.resolve()}. "
+            "Place HSI.xlsx in the working directory before running this script."
+        )
+
+    df = load_data(str(data_path))
+    df = inspect_data(df)
+    df = clean_data(df)
+    summarize_data(df)
+    save_data(df, OUTPUT_FILE)
+
+
+if __name__ == "__main__":
+    main()
+apply_patch(auto_approved=true) exited 0 in 179ms:
+Success. Updated the following files:
+A C:\Coding\AI-factory-projects\quantitative-research-workflow\code\task_001_data_loading.py
+file update:
+diff --git a/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_001_data_loading.py b/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_001_data_loading.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..a5791c0a137eb2f6917ebb66b6444d6930643ffa
+--- /dev/null
++++ b/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_001_data_loading.py
+@@ -0,0 +1,96 @@
++from pathlib import Path
++
++import numpy as np
++import pandas as pd
++
++
++DATA_FILE = "HSI.xlsx"
++OUTPUT_FILE = "hsi_clean.csv"
++VOTE_TOLERANCE = 1e-6
++SUMMARY_COLUMNS = ["Open", "High", "Low", "Close", "Up votes", "Down votes"]
++
++
++def load_data(file_path: str) -> pd.DataFrame:
++    print(f"Loading data from {file_path}...")
++    df = pd.read_excel(file_path)
++    df["Date"] = pd.to_datetime(df["Date"])
++    df = df.sort_values("Date").reset_index(drop=True)
++    print("Data loaded and sorted by Date.")
++    return df
++
++
++def inspect_data(df: pd.DataFrame) -> pd.DataFrame:
++    print("\n=== Data Inspection ===")
++    print(f"Shape: {df.shape}")
++    print("\nColumn dtypes:")
++    print(df.dtypes)
++
++    print("\nMissing values by column:")
++    print(df.isna().sum())
++
++    duplicate_count = df.duplicated().sum()
++    print(f"\nDuplicate rows: {duplicate_count}")
++
++    df = df.copy()
++    df["vote_sum"] = df["Up votes"] + df["Down votes"]
++    df["vote_anomaly"] = (df["vote_sum"] - 1).abs() > VOTE_TOLERANCE
++    anomaly_count = int(df["vote_anomaly"].sum())
++    print(f"Vote sum anomaly rows: {anomaly_count}")
++    return df
++
++
++def clean_data(df: pd.DataFrame) -> pd.DataFrame:
++    print("\n=== Data Cleaning ===")
++    df = df.copy()
++
++    before_missing = df[["Up votes", "Down votes"]].isna().sum()
++    print("Missing sentiment values before forward fill:")
++    print(before_missing)
++
++    df["Up votes"] = df["Up votes"].ffill()
++    df["Down votes"] = df["Down votes"].ffill()
++
++    after_missing = df[["Up votes", "Down votes"]].isna().sum()
++    print("\nMissing sentiment values after forward fill:")
++    print(after_missing)
++
++    remaining_nans = int(after_missing.sum())
++    print(f"Remaining NaN in sentiment columns: {remaining_nans}")
++    return df
++
++
++def summarize_data(df: pd.DataFrame) -> pd.DataFrame:
++    print("\n=== Summary Statistics ===")
++    available_columns = [column for column in SUMMARY_COLUMNS if column in df.columns]
++    if not available_columns:
++        raise ValueError("No expected numeric columns found for summary statistics.")
++
++    summary = df[available_columns].describe()
++    print(summary)
++    return summary
++
++
++def save_data(df: pd.DataFrame, output_path: str) -> None:
++    print("\n=== Save Clean Data ===")
++    df.to_csv(output_path, index=False)
++    print(f"Clean data saved to {output_path}")
++    print(f"Final shape: {df.shape}")
++
++
++def main() -> None:
++    data_path = Path(DATA_FILE)
++    if not data_path.exists():
++        raise FileNotFoundError(
++            f"Input file not found: {data_path.resolve()}. "
++            "Place HSI.xlsx in the working directory before running this script."
++        )
++
++    df = load_data(str(data_path))
++    df = inspect_data(df)
++    df = clean_data(df)
++    summarize_data(df)
++    save_data(df, OUTPUT_FILE)
++
++
++if __name__ == "__main__":
++    main()
+
+file update:
+diff --git a/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_001_data_loading.py b/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_001_data_loading.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..a5791c0a137eb2f6917ebb66b6444d6930643ffa
+--- /dev/null
++++ b/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_001_data_loading.py
+@@ -0,0 +1,96 @@
++from pathlib import Path
++
++import numpy as np
++import pandas as pd
++
++
++DATA_FILE = "HSI.xlsx"
++OUTPUT_FILE = "hsi_clean.csv"
++VOTE_TOLERANCE = 1e-6
++SUMMARY_COLUMNS = ["Open", "High", "Low", "Close", "Up votes", "Down votes"]
++
++
++def load_data(file_path: str) -> pd.DataFrame:
++    print(f"Loading data from {file_path}...")
++    df = pd.read_excel(file_path)
++    df["Date"] = pd.to_datetime(df["Date"])
++    df = df.sort_values("Date").reset_index(drop=True)
++    print("Data loaded and sorted by Date.")
++    return df
++
++
++def inspect_data(df: pd.DataFrame) -> pd.DataFrame:
++    print("\n=== Data Inspection ===")
++    print(f"Shape: {df.shape}")
++    print("\nColumn dtypes:")
++    print(df.dtypes)
++
++    print("\nMissing values by column:")
++    print(df.isna().sum())
++
++    duplicate_count = df.duplicated().sum()
++    print(f"\nDuplicate rows: {duplicate_count}")
++
++    df = df.copy()
++    df["vote_sum"] = df["Up votes"] + df["Down votes"]
++    df["vote_anomaly"] = (df["vote_sum"] - 1).abs() > VOTE_TOLERANCE
++    anomaly_count = int(df["vote_anomaly"].sum())
++    print(f"Vote sum anomaly rows: {anomaly_count}")
++    return df
++
++
++def clean_data(df: pd.DataFrame) -> pd.DataFrame:
++    print("\n=== Data Cleaning ===")
++    df = df.copy()
++
++    before_missing = df[["Up votes", "Down votes"]].isna().sum()
++    print("Missing sentiment values before forward fill:")
++    print(before_missing)
++
++    df["Up votes"] = df["Up votes"].ffill()
++    df["Down votes"] = df["Down votes"].ffill()
++
++    after_missing = df[["Up votes", "Down votes"]].isna().sum()
++    print("\nMissing sentiment values after forward fill:")
++    print(after_missing)
++
++    remaining_nans = int(after_missing.sum())
++    print(f"Remaining NaN in sentiment columns: {remaining_nans}")
++    return df
++
++
++def summarize_data(df: pd.DataFrame) -> pd.DataFrame:
++    print("\n=== Summary Statistics ===")
++    available_columns = [column for column in SUMMARY_COLUMNS if column in df.columns]
++    if not available_columns:
++        raise ValueError("No expected numeric columns found for summary statistics.")
++
++    summary = df[available_columns].describe()
++    print(summary)
++    return summary
++
++
++def save_data(df: pd.DataFrame, output_path: str) -> None:
++    print("\n=== Save Clean Data ===")
++    df.to_csv(output_path, index=False)
++    print(f"Clean data saved to {output_path}")
++    print(f"Final shape: {df.shape}")
++
++
++def main() -> None:
++    data_path = Path(DATA_FILE)
++    if not data_path.exists():
++        raise FileNotFoundError(
++            f"Input file not found: {data_path.resolve()}. "
++            "Place HSI.xlsx in the working directory before running this script."
++        )
++
++    df = load_data(str(data_path))
++    df = inspect_data(df)
++    df = clean_data(df)
++    summarize_data(df)
++    save_data(df, OUTPUT_FILE)
++
++
++if __name__ == "__main__":
++    main()
+
+codex
+脚本已写好。我先做一次本地执行检查：至少验证 Python 能导入并编译这份脚本；如果 `HSI.xlsx` 实际存在，再跑完整流程确认输出。
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command 'python -m py_compile task_001_data_loading.py' in C:\Coding\AI-factory-projects\quantitative-research-workflow\codeexec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command 'Get-ChildItem -File HSI.xlsx | Select-Object -ExpandProperty FullName' in C:\Coding\AI-factory-projects\quantitative-research-workflow\code succeeded in 344ms:
+
+ exited 1 in 473ms:
+Get-ChildItem : 找不到路径“C:\Coding\AI-factory-projects\quantitative-research-workflow\code\HSI.xlsx”，因为该路径不存在。
+所在位置 行:2 字符: 1
++ Get-ChildItem -File HSI.xlsx | Select-Object -ExpandProperty FullName
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (C:\Coding\AI-fa...w\code\HSI.xlsx:String) [Get-ChildItem], ItemNotFound 
+   Exception
+    + FullyQualifiedErrorId : PathNotFound,Microsoft.PowerShell.Commands.GetChildItemCommand
+ 
+file update:
+diff --git a/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_001_data_loading.py b/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_001_data_loading.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..a5791c0a137eb2f6917ebb66b6444d6930643ffa
+--- /dev/null
++++ b/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_001_data_loading.py
+@@ -0,0 +1,96 @@
++from pathlib import Path
++
++import numpy as np
++import pandas as pd
++
++
++DATA_FILE = "HSI.xlsx"
++OUTPUT_FILE = "hsi_clean.csv"
++VOTE_TOLERANCE = 1e-6
++SUMMARY_COLUMNS = ["Open", "High", "Low", "Close", "Up votes", "Down votes"]
++
++
++def load_data(file_path: str) -> pd.DataFrame:
++    print(f"Loading data from {file_path}...")
++    df = pd.read_excel(file_path)
++    df["Date"] = pd.to_datetime(df["Date"])
++    df = df.sort_values("Date").reset_index(drop=True)
++    print("Data loaded and sorted by Date.")
++    return df
++
++
++def inspect_data(df: pd.DataFrame) -> pd.DataFrame:
++    print("\n=== Data Inspection ===")
++    print(f"Shape: {df.shape}")
++    print("\nColumn dtypes:")
++    print(df.dtypes)
++
++    print("\nMissing values by column:")
++    print(df.isna().sum())
++
++    duplicate_count = df.duplicated().sum()
++    print(f"\nDuplicate rows: {duplicate_count}")
++
++    df = df.copy()
++    df["vote_sum"] = df["Up votes"] + df["Down votes"]
++    df["vote_anomaly"] = (df["vote_sum"] - 1).abs() > VOTE_TOLERANCE
++    anomaly_count = int(df["vote_anomaly"].sum())
++    print(f"Vote sum anomaly rows: {anomaly_count}")
++    return df
++
++
++def clean_data(df: pd.DataFrame) -> pd.DataFrame:
++    print("\n=== Data Cleaning ===")
++    df = df.copy()
++
++    before_missing = df[["Up votes", "Down votes"]].isna().sum()
++    print("Missing sentiment values before forward fill:")
++    print(before_missing)
++
++    df["Up votes"] = df["Up votes"].ffill()
++    df["Down votes"] = df["Down votes"].ffill()
++
++    after_missing = df[["Up votes", "Down votes"]].isna().sum()
++    print("\nMissing sentiment values after forward fill:")
++    print(after_missing)
++
++    remaining_nans = int(after_missing.sum())
++    print(f"Remaining NaN in sentiment columns: {remaining_nans}")
++    return df
++
++
++def summarize_data(df: pd.DataFrame) -> pd.DataFrame:
++    print("\n=== Summary Statistics ===")
++    available_columns = [column for column in SUMMARY_COLUMNS if column in df.columns]
++    if not available_columns:
++        raise ValueError("No expected numeric columns found for summary statistics.")
++
++    summary = df[available_columns].describe()
++    print(summary)
++    return summary
++
++
++def save_data(df: pd.DataFrame, output_path: str) -> None:
++    print("\n=== Save Clean Data ===")
++    df.to_csv(output_path, index=False)
++    print(f"Clean data saved to {output_path}")
++    print(f"Final shape: {df.shape}")
++
++
++def main() -> None:
++    data_path = Path(DATA_FILE)
++    if not data_path.exists():
++        raise FileNotFoundError(
++            f"Input file not found: {data_path.resolve()}. "
++            "Place HSI.xlsx in the working directory before running this script."
++        )
++
++    df = load_data(str(data_path))
++    df = inspect_data(df)
++    df = clean_data(df)
++    summarize_data(df)
++    save_data(df, OUTPUT_FILE)
++
++
++if __name__ == "__main__":
++    main()
+
+codex
+已创建 [task_001_data_loading.py](C:\Coding\AI-factory-projects\quantitative-research-workflow\code\task_001_data_loading.py)。
+
+这个脚本按要求封装了 5 个步骤：加载并按 `Date` 排序、数据检测、对 `Up votes`/`Down votes` 做 `ffill` 清洗、输出基础统计摘要、保存为 `hsi_clean.csv`，并保留了 `vote_sum` 和 `vote_anomaly` 标注列，末尾也有 `if __name__ == "__main__": main()` 入口。
+
+本地验证情况：
+- `python -m py_compile task_001_data_loading.py` 通过
+- 当前工作目录下没有找到 `HSI.xlsx`，所以无法实际跑出你验收标准里的 747 行、195 条缺失记录等结果
+
+把 `HSI.xlsx` 放到 `code/` 目录后，直接运行：
+```powershell
+python task_001_data_loading.py
+```
+如果你要，我下一步可以继续替你补上一个简单的 notebook 展示版本，或者加上更严格的列存在性校验。
+file update:
+diff --git a/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_001_data_loading.py b/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_001_data_loading.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..a5791c0a137eb2f6917ebb66b6444d6930643ffa
+--- /dev/null
++++ b/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_001_data_loading.py
+@@ -0,0 +1,96 @@
++from pathlib import Path
++
++import numpy as np
++import pandas as pd
++
++
++DATA_FILE = "HSI.xlsx"
++OUTPUT_FILE = "hsi_clean.csv"
++VOTE_TOLERANCE = 1e-6
++SUMMARY_COLUMNS = ["Open", "High", "Low", "Close", "Up votes", "Down votes"]
++
++
++def load_data(file_path: str) -> pd.DataFrame:
++    print(f"Loading data from {file_path}...")
++    df = pd.read_excel(file_path)
++    df["Date"] = pd.to_datetime(df["Date"])
++    df = df.sort_values("Date").reset_index(drop=True)
++    print("Data loaded and sorted by Date.")
++    return df
++
++
++def inspect_data(df: pd.DataFrame) -> pd.DataFrame:
++    print("\n=== Data Inspection ===")
++    print(f"Shape: {df.shape}")
++    print("\nColumn dtypes:")
++    print(df.dtypes)
++
++    print("\nMissing values by column:")
++    print(df.isna().sum())
++
++    duplicate_count = df.duplicated().sum()
++    print(f"\nDuplicate rows: {duplicate_count}")
++
++    df = df.copy()
++    df["vote_sum"] = df["Up votes"] + df["Down votes"]
++    df["vote_anomaly"] = (df["vote_sum"] - 1).abs() > VOTE_TOLERANCE
++    anomaly_count = int(df["vote_anomaly"].sum())
++    print(f"Vote sum anomaly rows: {anomaly_count}")
++    return df
++
++
++def clean_data(df: pd.DataFrame) -> pd.DataFrame:
++    print("\n=== Data Cleaning ===")
++    df = df.copy()
++
++    before_missing = df[["Up votes", "Down votes"]].isna().sum()
++    print("Missing sentiment values before forward fill:")
++    print(before_missing)
++
++    df["Up votes"] = df["Up votes"].ffill()
++    df["Down votes"] = df["Down votes"].ffill()
++
++    after_missing = df[["Up votes", "Down votes"]].isna().sum()
++    print("\nMissing sentiment values after forward fill:")
++    print(after_missing)
++
++    remaining_nans = int(after_missing.sum())
++    print(f"Remaining NaN in sentiment columns: {remaining_nans}")
++    return df
++
++
++def summarize_data(df: pd.DataFrame) -> pd.DataFrame:
++    print("\n=== Summary Statistics ===")
++    available_columns = [column for column in SUMMARY_COLUMNS if column in df.columns]
++    if not available_columns:
++        raise ValueError("No expected numeric columns found for summary statistics.")
++
++    summary = df[available_columns].describe()
++    print(summary)
++    return summary
++
++
++def save_data(df: pd.DataFrame, output_path: str) -> None:
++    print("\n=== Save Clean Data ===")
++    df.to_csv(output_path, index=False)
++    print(f"Clean data saved to {output_path}")
++    print(f"Final shape: {df.shape}")
++
++
++def main() -> None:
++    data_path = Path(DATA_FILE)
++    if not data_path.exists():
++        raise FileNotFoundError(
++            f"Input file not found: {data_path.resolve()}. "
++            "Place HSI.xlsx in the working directory before running this script."
++        )
++
++    df = load_data(str(data_path))
++    df = inspect_data(df)
++    df = clean_data(df)
++    summarize_data(df)
++    save_data(df, OUTPUT_FILE)
++
++
++if __name__ == "__main__":
++    main()
+
+tokens used
+4,251
+已创建 [task_001_data_loading.py](C:\Coding\AI-factory-projects\quantitative-research-workflow\code\task_001_data_loading.py)。
+
+这个脚本按要求封装了 5 个步骤：加载并按 `Date` 排序、数据检测、对 `Up votes`/`Down votes` 做 `ffill` 清洗、输出基础统计摘要、保存为 `hsi_clean.csv`，并保留了 `vote_sum` 和 `vote_anomaly` 标注列，末尾也有 `if __name__ == "__main__": main()` 入口。
+
+本地验证情况：
+- `python -m py_compile task_001_data_loading.py` 通过
+- 当前工作目录下没有找到 `HSI.xlsx`，所以无法实际跑出你验收标准里的 747 行、195 条缺失记录等结果
+
+把 `HSI.xlsx` 放到 `code/` 目录后，直接运行：
+```powershell
+python task_001_data_loading.py
+```
+如果你要，我下一步可以继续替你补上一个简单的 notebook 展示版本，或者加上更严格的列存在性校验。

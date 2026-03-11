@@ -1,0 +1,1762 @@
+# Codex Log: Task 005 - Insights
+
+## Prompt
+
+# Task 005 — Insight 总结
+
+## 目标
+基于 Task 4 的信号分析结果，撰写结构化的中英文洞察总结，嵌入 Notebook 作为 Markdown cell。
+
+## 工作目录
+`code/`
+
+## 依赖
+- `hsi_features.csv`（Task 002 输出）
+- Task 004 的分析逻辑（需重新计算指标）
+
+## 输出文件
+- `task_005_insights.py` — Insight 生成模块（动态计算指标，生成结论文本）
+
+## 详细要求
+
+### 1. 动态生成 Insight 文本
+基于实际计算的指标值，自动生成文字结论：
+
+```python
+def generate_insights(mean_ic, icir, decay_results, ic_df):
+    """基于量化指标生成结构化 Insight 文本"""
+
+    insights = []
+
+    # 1. 统计预测力
+    if abs(mean_ic) > 0.05 and icir > 0.5:
+        pred_conclusion = "情绪信号对次日收益具有统计显著的预测力（IC显著异于0）"
+    elif abs(mean_ic) > 0.02:
+        pred_conclusion = "情绪信号对次日收益具有微弱但存在的预测力"
+    else:
+        pred_conclusion = "情绪信号对次日收益的预测力不显著"
+
+    insights.append(f"**1. 统计预测力**: {pred_conclusion}")
+    insights.append(f"   - Mean IC = {mean_ic:.4f}, ICIR = {icir:.4f}")
+
+    # 2. 信号时效性
+    lag1_ic = decay_results[0]['ic']
+    lag2_ic = decay_results[1]['ic']
+    lag3_ic = decay_results[2]['ic']
+
+    if abs(lag1_ic) > abs(lag2_ic) and abs(lag1_ic) > abs(lag3_ic):
+        decay_conclusion = "信号以短期为主（t+1 预测力最强），alpha 在 1-2 天内衰减"
+    else:
+        decay_conclusion = "信号衰减模式不明显，可能存在持续性中期影响"
+
+    insights.append(f"\n**2. 信号时效性**: {decay_conclusion}")
+    insights.append(f"   - IC(t+1)={lag1_ic:.4f}, IC(t+2)={lag2_ic:.4f}, IC(t+3)={lag3_ic:.4f}")
+
+    # 3. 投票强度影响
+    insights.append("\n**3. 投票强度**: 高 vote_imbalance 日的信号应更为可靠（见 Strategy C 验证）")
+    insights.append("   - vote_imbalance 作为信号过滤器，筛选共识度高的交易日")
+
+    # 4. 市场状态稳定性
+    positive_ic_pct = (ic_df['ic'] > 0).mean()
+    if positive_ic_pct > 0.6:
+        stability = f"信号在 {positive_ic_pct:.0%} 的月份中保持正向 IC，具有较强稳定性"
+    else:
+        stability = f"信号仅在 {positive_ic_pct:.0%} 的月份中为正 IC，稳定性存疑"
+
+    insights.append(f"\n**4. 信号稳定性**: {stability}")
+
+    return "\n".join(insights)
+```
+
+### 2. 打印完整 Insight 报告
+```python
+print("=" * 60)
+print("SIGNAL ANALYSIS INSIGHTS")
+print("=" * 60)
+print(generate_insights(mean_ic, icir, decay_results, ic_df))
+print("=" * 60)
+```
+
+### 3. 生成 Notebook Markdown Cell 内容
+```python
+# 生成适合嵌入 Notebook 的 Markdown 格式
+markdown_content = f"""
+## 6. Signal Analysis Insights
+
+### Key Findings
+
+{generate_insights(mean_ic, icir, decay_results, ic_df)}
+
+### Interpretation for Trading
+
+Based on the signal analysis:
+- **Entry**: Use daily sentiment score as the primary signal
+- **Signal Quality**: ICIR = {icir:.4f} (>0.5 suggests usable signal)
+- **Decay**: The signal is primarily short-term, suggesting intraday/next-day positioning
+- **Filter**: Apply vote_imbalance filter to improve signal quality (Strategy C)
+"""
+
+print(markdown_content)
+```
+
+## 代码规范
+- Insight 文本使用中文，英文指标名保持英文
+- 结论应基于实际计算的数值，动态生成（不硬编码结论）
+- 需要重新加载 `hsi_features.csv` 并重新计算 IC 指标
+
+## 验收标准
+- [ ] 动态生成基于实际数值的 4 个维度 Insight
+- [ ] 结论表述准确反映指标数值含义
+- [ ] Markdown 格式输出适合嵌入 Notebook
+
+<!-- FACTORY:DONE -->
+
+
+## Output
+
+OpenAI Codex v0.111.0 (research preview)
+--------
+workdir: C:\Coding\AI-factory-projects\quantitative-research-workflow\code
+model: gpt-5.4
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, C:\Users\86579\.codex\memories]
+reasoning effort: none
+reasoning summaries: none
+session id: 019cdde4-9ca8-7c01-8c08-ae67d03b1749
+--------
+user
+# Task 005 — Insight 总结
+
+## 目标
+基于 Task 4 的信号分析结果，撰写结构化的中英文洞察总结，嵌入 Notebook 作为 Markdown cell。
+
+## 工作目录
+`code/`
+
+## 依赖
+- `hsi_features.csv`（Task 002 输出）
+- Task 004 的分析逻辑（需重新计算指标）
+
+## 输出文件
+- `task_005_insights.py` — Insight 生成模块（动态计算指标，生成结论文本）
+
+## 详细要求
+
+### 1. 动态生成 Insight 文本
+基于实际计算的指标值，自动生成文字结论：
+
+```python
+def generate_insights(mean_ic, icir, decay_results, ic_df):
+    """基于量化指标生成结构化 Insight 文本"""
+
+    insights = []
+
+    # 1. 统计预测力
+    if abs(mean_ic) > 0.05 and icir > 0.5:
+        pred_conclusion = "情绪信号对次日收益具有统计显著的预测力（IC显著异于0）"
+    elif abs(mean_ic) > 0.02:
+        pred_conclusion = "情绪信号对次日收益具有微弱但存在的预测力"
+    else:
+        pred_conclusion = "情绪信号对次日收益的预测力不显著"
+
+    insights.append(f"**1. 统计预测力**: {pred_conclusion}")
+    insights.append(f"   - Mean IC = {mean_ic:.4f}, ICIR = {icir:.4f}")
+
+    # 2. 信号时效性
+    lag1_ic = decay_results[0]['ic']
+    lag2_ic = decay_results[1]['ic']
+    lag3_ic = decay_results[2]['ic']
+
+    if abs(lag1_ic) > abs(lag2_ic) and abs(lag1_ic) > abs(lag3_ic):
+        decay_conclusion = "信号以短期为主（t+1 预测力最强），alpha 在 1-2 天内衰减"
+    else:
+        decay_conclusion = "信号衰减模式不明显，可能存在持续性中期影响"
+
+    insights.append(f"\n**2. 信号时效性**: {decay_conclusion}")
+    insights.append(f"   - IC(t+1)={lag1_ic:.4f}, IC(t+2)={lag2_ic:.4f}, IC(t+3)={lag3_ic:.4f}")
+
+    # 3. 投票强度影响
+    insights.append("\n**3. 投票强度**: 高 vote_imbalance 日的信号应更为可靠（见 Strategy C 验证）")
+    insights.append("   - vote_imbalance 作为信号过滤器，筛选共识度高的交易日")
+
+    # 4. 市场状态稳定性
+    positive_ic_pct = (ic_df['ic'] > 0).mean()
+    if positive_ic_pct > 0.6:
+        stability = f"信号在 {positive_ic_pct:.0%} 的月份中保持正向 IC，具有较强稳定性"
+    else:
+        stability = f"信号仅在 {positive_ic_pct:.0%} 的月份中为正 IC，稳定性存疑"
+
+    insights.append(f"\n**4. 信号稳定性**: {stability}")
+
+    return "\n".join(insights)
+```
+
+### 2. 打印完整 Insight 报告
+```python
+print("=" * 60)
+print("SIGNAL ANALYSIS INSIGHTS")
+print("=" * 60)
+print(generate_insights(mean_ic, icir, decay_results, ic_df))
+print("=" * 60)
+```
+
+### 3. 生成 Notebook Markdown Cell 内容
+```python
+# 生成适合嵌入 Notebook 的 Markdown 格式
+markdown_content = f"""
+## 6. Signal Analysis Insights
+
+### Key Findings
+
+{generate_insights(mean_ic, icir, decay_results, ic_df)}
+
+### Interpretation for Trading
+
+Based on the signal analysis:
+- **Entry**: Use daily sentiment score as the primary signal
+- **Signal Quality**: ICIR = {icir:.4f} (>0.5 suggests usable signal)
+- **Decay**: The signal is primarily short-term, suggesting intraday/next-day positioning
+- **Filter**: Apply vote_imbalance filter to improve signal quality (Strategy C)
+"""
+
+print(markdown_content)
+```
+
+## 代码规范
+- Insight 文本使用中文，英文指标名保持英文
+- 结论应基于实际计算的数值，动态生成（不硬编码结论）
+- 需要重新加载 `hsi_features.csv` 并重新计算 IC 指标
+
+## 验收标准
+- [ ] 动态生成基于实际数值的 4 个维度 Insight
+- [ ] 结论表述准确反映指标数值含义
+- [ ] Markdown 格式输出适合嵌入 Notebook
+
+<!-- FACTORY:DONE -->
+
+mcp startup: no servers
+codex
+我会先检查 `Task 004` 的分析实现和 `hsi_features.csv` 的位置，确认现有指标口径后直接补上 `task_005_insights.py`，确保它能独立重算并输出 Notebook Markdown。
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "rg --files | rg \"task_004|hsi_features\\.csv|insight|notebook|ipynb\"" in C:\Coding\AI-factory-projects\quantitative-research-workflow\codeexec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command 'Get-ChildItem -Force' in C:\Coding\AI-factory-projects\quantitative-research-workflow\codeexec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command 'rg -n "mean_ic|ICIR|decay|vote_imbalance|ic_df|generate_insights" -S .' in C:\Coding\AI-factory-projects\quantitative-research-workflow\code succeeded in 384ms:
+.\task_002_feature_engineering.py:10:    "vote_imbalance",
+.\task_002_feature_engineering.py:51:    # vote_imbalance: 情绪强度，绝对值越大表示投票者共识越强
+.\task_002_feature_engineering.py:52:    df["vote_imbalance"] = df["sentiment_score"].abs()
+.\task_004_signal_analysis.py:13:SIGNAL_DECAY_FIG = "fig_09_signal_decay.png"
+.\task_004_signal_analysis.py:15:SIGNAL_DECAY_OUTPUT = "signal_decay.csv"
+.\task_004_signal_analysis.py:72:    ic_df = pd.DataFrame(monthly_ic)
+.\task_004_signal_analysis.py:73:    if ic_df.empty:
+.\task_004_signal_analysis.py:79:    ic_df["period_dt"] = ic_df["period"].dt.to_timestamp()
+.\task_004_signal_analysis.py:80:    return ic_df
+.\task_004_signal_analysis.py:83:def plot_monthly_ic(ic_df: pd.DataFrame) -> None:
+.\task_004_signal_analysis.py:84:    mean_ic = ic_df["ic"].mean()
+.\task_004_signal_analysis.py:85:    colors = ["green" if x > 0 else "red" for x in ic_df["ic"]]
+.\task_004_signal_analysis.py:88:    ax.bar(ic_df["period_dt"], ic_df["ic"], width=20, color=colors, alpha=0.7)
+.\task_004_signal_analysis.py:91:        y=mean_ic,
+.\task_004_signal_analysis.py:94:        label=f"Mean IC={mean_ic:.4f}",
+.\task_004_signal_analysis.py:103:def print_ic_metrics(ic_df: pd.DataFrame) -> dict[str, float]:
+.\task_004_signal_analysis.py:104:    mean_ic = ic_df["ic"].mean()
+.\task_004_signal_analysis.py:105:    std_ic = ic_df["ic"].std()
+.\task_004_signal_analysis.py:106:    ic_positive_pct = (ic_df["ic"] > 0).mean()
+.\task_004_signal_analysis.py:107:    icir = np.nan if pd.isna(std_ic) or np.isclose(std_ic, 0) else mean_ic / std_ic
+ succeeded in 391ms:
+
+
+    目录: C:\Coding\AI-factory-projects\quantitative-research-workflow\code
+
+
+Mode                 LastWriteTime         Length Name                                                                 
+----                 -------------         ------ ----                                                                 
+d-----         2026/3/12      1:14                __pycache__                                                          
+-a----         2026/3/12      1:10           2802 task_001_data_loading.py                                             
+-a----         2026/3/12      1:11           3991 task_002_feature_engineering.py                                      
+-a----         2026/3/12      1:12           6707 task_003_eda.py                                                      
+-a----         2026/3/12      1:14           6835 task_004_signal_analysis.py                                          
+
+
+ succeeded in 424ms:
+__pycache__\task_004_signal_analysis.cpython-314.pyc
+task_004_signal_analysis.py
+codex
+我已经定位到现有分析脚本，接下来会复用 `task_004_signal_analysis.py` 的口径而不是重新猜测公式，避免 Insight 与前一任务结果不一致。
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command 'Get-Content task_004_signal_analysis.py' in C:\Coding\AI-factory-projects\quantitative-research-workflow\codeexec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command 'Get-Content task_002_feature_engineering.py' in C:\Coding\AI-factory-projects\quantitative-research-workflow\codeexec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command 'Get-ChildItem -Recurse -Filter hsi_features.csv | Select-Object -ExpandProperty FullName' in C:\Coding\AI-factory-projects\quantitative-research-workflow\code succeeded in 364ms:
+from pathlib import Path
+
+import pandas as pd
+
+
+INPUT_FILE = "hsi_clean.csv"
+OUTPUT_FILE = "hsi_features.csv"
+FEATURE_SUMMARY_COLUMNS = [
+    "sentiment_score",
+    "vote_imbalance",
+    "return_open",
+    "return_close",
+]
+
+
+def load_data(file_path: str) -> pd.DataFrame:
+    print(f"Loading clean data from {file_path}...")
+    df = pd.read_csv(file_path)
+    if "Date" in df.columns:
+        df["Date"] = pd.to_datetime(df["Date"])
+ succeeded in 400ms:
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import seaborn as sns
+from scipy import stats
+from scipy.stats import ttest_1samp
+
+
+INPUT_FILE = "hsi_features.csv"
+MONTHLY_IC_FIG = "fig_08_monthly_ic.png"
+SIGNAL_DECAY_FIG = "fig_09_signal_decay.png"
+MONTHLY_IC_OUTPUT = "monthly_ic.csv"
+SIGNAL_DECAY_OUTPUT = "signal_decay.csv"
+MIN_MONTHLY_OBSERVATIONS = 5
+DECAY_HORIZONS = [1, 2, 3]
+FONT_SIZE = 12
+
+
+ succeeded in 368ms:
+
+codex
+`hsi_features.csv` 目前不在工作目录里，所以我会把脚本做成可直接运行但不依赖已落盘分析结果；如果输入文件随后放到 `code/` 下，它会按 Task 004 的逻辑重算并生成洞察。
+codex
+我准备新增一个独立脚本，复用 `Task 004` 的计算函数，并补一个基于 `vote_imbalance` 分组的动态检验，让四个维度都由真实数值驱动，而不是模板文案。
+file update
+A C:\Coding\AI-factory-projects\quantitative-research-workflow\code\task_005_insights.py
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+from scipy import stats
+
+from task_004_signal_analysis import (
+    INPUT_FILE,
+    compute_monthly_ic,
+    compute_signal_decay,
+    load_data,
+    run_ic_ttest,
+    validate_columns,
+)
+
+
+HIGH_IMBALANCE_QUANTILE = 0.7
+LOW_IMBALANCE_QUANTILE = 0.3
+
+
+def compute_vote_imbalance_effect(df: pd.DataFrame) -> dict[str, float]:
+    required_columns = {"vote_imbalance", "sentiment_score", "return_open"}
+    missing_columns = required_columns.difference(df.columns)
+    if missing_columns:
+        missing_str = ", ".join(sorted(missing_columns))
+        raise ValueError(f"Missing required columns for vote imbalance analysis: {missing_str}")
+
+    high_cutoff = df["vote_imbalance"].quantile(HIGH_IMBALANCE_QUANTILE)
+    low_cutoff = df["vote_imbalance"].quantile(LOW_IMBALANCE_QUANTILE)
+
+    high_sample = df.loc[
+        df["vote_imbalance"] >= high_cutoff,
+        ["sentiment_score", "return_open"],
+    ].dropna()
+    low_sample = df.loc[
+        df["vote_imbalance"] <= low_cutoff,
+        ["sentiment_score", "return_open"],
+    ].dropna()
+
+    high_ic = np.nan
+    low_ic = np.nan
+
+    if len(high_sample) >= 2:
+        high_ic, _ = stats.spearmanr(high_sample["sentiment_score"], high_sample["return_open"])
+    if len(low_sample) >= 2:
+        low_ic, _ = stats.spearmanr(low_sample["sentiment_score"], low_sample["return_open"])
+
+    return {
+        "high_cutoff": high_cutoff,
+        "low_cutoff": low_cutoff,
+        "high_ic": high_ic,
+        "low_ic": low_ic,
+        "high_n": len(high_sample),
+        "low_n": len(low_sample),
+        "ic_spread": high_ic - low_ic if not pd.isna(high_ic) and not pd.isna(low_ic) else np.nan,
+    }
+
+
+def _format_float(value: float) -> str:
+    return f"{value:.4f}" if not pd.isna(value) else "nan"
+
+
+def generate_insights(
+    mean_ic: float,
+    icir: float,
+    decay_df: pd.DataFrame,
+    ic_df: pd.DataFrame,
+    ttest_p_value: float,
+    vote_effect: dict[str, float],
+) -> str:
+    insights: list[str] = []
+
+    if abs(mean_ic) > 0.05 and not pd.isna(icir) and abs(icir) > 0.5 and ttest_p_value < 0.05:
+        pred_conclusion = "情绪信号对次日收益具有统计显著的预测力，且 IC 显著异于 0。"
+    elif abs(mean_ic) > 0.02 and ttest_p_value < 0.10:
+        pred_conclusion = "情绪信号对次日收益具有偏弱但可识别的预测力。"
+    else:
+        pred_conclusion = "情绪信号对次日收益的预测力不显著，统计证据不足。"
+
+    insights.append(f"**1. 统计预测力 Statistical Predictiveness**: {pred_conclusion}")
+    insights.append(
+        "   - "
+        f"Mean IC = {_format_float(mean_ic)}, ICIR = {_format_float(icir)}, "
+        f"t-test p-value = {_format_float(ttest_p_value)}"
+    )
+
+    lag_map = {
+        row["horizon"]: row["ic"]
+        for _, row in decay_df.iterrows()
+    }
+    lag1_ic = lag_map.get("t+1", np.nan)
+    lag2_ic = lag_map.get("t+2", np.nan)
+    lag3_ic = lag_map.get("t+3", np.nan)
+    lag_abs = pd.Series({"t+1": abs(lag1_ic), "t+2": abs(lag2_ic), "t+3": abs(lag3_ic)}).dropna()
+
+    if not lag_abs.empty and lag_abs.idxmax() == "t+1" and lag_abs.loc["t+1"] > 0:
+        decay_conclusion = "信号以短期为主，t+1 的预测力最强，alpha 更可能在 1 至 2 天内衰减。"
+    elif not lag_abs.empty and lag_abs.idxmax() in {"t+2", "t+3"}:
+        decay_conclusion = "信号并非只在次日生效，较长持有期仍保留部分预测力。"
+    else:
+        decay_conclusion = "信号衰减模式不明显，时效性结论仍需谨慎。"
+
+    insights.append(f"\n**2. 信号时效性 Signal Decay**: {decay_conclusion}")
+    insights.append(
+        "   - "
+        f"IC(t+1) = {_format_float(lag1_ic)}, "
+        f"IC(t+2) = {_format_float(lag2_ic)}, "
+        f"IC(t+3) = {_format_float(lag3_ic)}"
+    )
+
+    high_ic = vote_effect["high_ic"]
+    low_ic = vote_effect["low_ic"]
+    ic_spread = vote_effect["ic_spread"]
+    if not pd.isna(high_ic) and not pd.isna(low_ic) and abs(high_ic) > abs(low_ic):
+        vote_conclusion = "高 vote_imbalance 样本的 IC 更强，说明共识度高时信号质量更好，可作为过滤器。"
+    elif not pd.isna(high_ic) and not pd.isna(low_ic):
+        vote_conclusion = "高 vote_imbalance 并未明显提升 IC，情绪强度过滤的增益有限。"
+    else:
+        vote_conclusion = "vote_imbalance 分层样本不足，暂时无法确认强度过滤是否有效。"
+
+    insights.append(f"\n**3. 投票强度 Vote Imbalance**: {vote_conclusion}")
+    insights.append(
+        "   - "
+        f"High group IC = {_format_float(high_ic)} (n={vote_effect['high_n']}), "
+        f"Low group IC = {_format_float(low_ic)} (n={vote_effect['low_n']}), "
+        f"Spread = {_format_float(ic_spread)}"
+    )
+
+    positive_ic_pct = (ic_df["ic"] > 0).mean()
+    if positive_ic_pct >= 0.6 and mean_ic > 0:
+        stability = f"信号在 {positive_ic_pct:.0%} 的月份中保持正向 IC，稳定性较强。"
+    elif positive_ic_pct >= 0.5:
+        stability = f"信号在 {positive_ic_pct:.0%} 的月份中为正，具备一定稳定性但一致性一般。"
+    else:
+        stability = f"信号仅在 {positive_ic_pct:.0%} 的月份中为正，跨市场状态稳定性存疑。"
+
+    insights.append(f"\n**4. 信号稳定性 Signal Stability**: {stability}")
+    insights.append(
+        "   - "
+        f"Positive IC months = {positive_ic_pct:.0%}, Monthly observations = {len(ic_df)}"
+    )
+
+    return "\n".join(insights)
+
+
+def generate_english_summary(
+    mean_ic: float,
+    icir: float,
+    decay_df: pd.DataFrame,
+    ic_df: pd.DataFrame,
+    vote_effect: dict[str, float],
+) -> str:
+    lag_map = {row["horizon"]: row["ic"] for _, row in decay_df.iterrows()}
+    positive_ic_pct = (ic_df["ic"] > 0).mean()
+    return "\n".join(
+        [
+            "- **Predictiveness**: "
+            f"Mean IC = {_format_float(mean_ic)} and ICIR = {_format_float(icir)} summarize the signal's base efficacy.",
+            "- **Decay**: "
+            f"IC(t+1) = {_format_float(lag_map.get('t+1', np.nan))}, "
+            f"IC(t+2) = {_format_float(lag_map.get('t+2', np.nan))}, "
+            f"IC(t+3) = {_format_float(lag_map.get('t+3', np.nan))}.",
+            "- **Vote Imbalance Filter**: "
+            f"High-consensus days show IC = {_format_float(vote_effect['high_ic'])} versus "
+            f"{_format_float(vote_effect['low_ic'])} on low-consensus days.",
+            "- **Stability**: "
+            f"{positive_ic_pct:.0%} of monthly IC observations are positive.",
+        ]
+    )
+
+
+def build_markdown_content(
+    mean_ic: float,
+    icir: float,
+    decay_df: pd.DataFrame,
+    ic_df: pd.DataFrame,
+    ttest_p_value: float,
+    vote_effect: dict[str, float],
+) -> str:
+    insights_text = generate_insights(
+        mean_ic=mean_ic,
+        icir=icir,
+        decay_df=decay_df,
+        ic_df=ic_df,
+        ttest_p_value=ttest_p_value,
+        vote_effect=vote_effect,
+    )
+    english_summary = generate_english_summary(
+        mean_ic=mean_ic,
+        icir=icir,
+        decay_df=decay_df,
+        ic_df=ic_df,
+        vote_effect=vote_effect,
+    )
+
+    lag_map = {row["horizon"]: row["ic"] for _, row in decay_df.iterrows()}
+    return f"""
+## 6. Signal Analysis Insights
+
+### Key Findings | 核心洞察
+
+{insights_text}
+
+### Interpretation for Trading | 交易含义
+
+Based on the signal analysis:
+- **Entry**: Use daily sentiment score as the primary signal.
+- **Signal Quality**: ICIR = {_format_float(icir)}.
+- **Decay**: IC(t+1) = {_format_float(lag_map.get("t+1", np.nan))}, suggesting focus on short-horizon positioning when the front-end IC is strongest.
+- **Filter**: Use `vote_imbalance` as a quality filter when high-consensus days show stronger IC.
+
+### English Summary
+
+{english_summary}
+""".strip()
+
+
+def main() -> None:
+    input_path = Path(INPUT_FILE)
+    if not input_path.exists():
+        raise FileNotFoundError(
+            f"Input file not found: {input_path.resolve()}. "
+            "Run task_002_feature_engineering.py first to generate hsi_features.csv."
+        )
+
+    df = load_data(str(input_path))
+    validate_columns(df)
+
+    ic_df = compute_monthly_ic(df)
+    decay_df = compute_signal_decay(df)
+    metrics = {
+        "mean_ic": ic_df["ic"].mean(),
+        "std_ic": ic_df["ic"].std(),
+    }
+    metrics["icir"] = (
+        np.nan
+        if pd.isna(metrics["std_ic"]) or np.isclose(metrics["std_ic"], 0)
+        else metrics["mean_ic"] / metrics["std_ic"]
+    )
+    _, ttest_p_value = run_ic_ttest(ic_df)
+    vote_effect = compute_vote_imbalance_effect(df)
+
+    insight_report = generate_insights(
+        mean_ic=metrics["mean_ic"],
+        icir=metrics["icir"],
+        decay_df=decay_df,
+        ic_df=ic_df,
+        ttest_p_value=ttest_p_value,
+        vote_effect=vote_effect,
+    )
+
+    print("=" * 60)
+    print("SIGNAL ANALYSIS INSIGHTS")
+    print("=" * 60)
+    print(insight_report)
+    print("=" * 60)
+
+    markdown_content = build_markdown_content(
+        mean_ic=metrics["mean_ic"],
+        icir=metrics["icir"],
+        decay_df=decay_df,
+        ic_df=ic_df,
+        ttest_p_value=ttest_p_value,
+        vote_effect=vote_effect,
+    )
+    print(markdown_content)
+
+
+if __name__ == "__main__":
+    main()
+apply_patch(auto_approved=true) exited 0 in 100ms:
+Success. Updated the following files:
+A C:\Coding\AI-factory-projects\quantitative-research-workflow\code\task_005_insights.py
+file update:
+diff --git a/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_005_insights.py b/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_005_insights.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..e58b6d2fb3c06ec56bb21e0ded8dc11e85f6aa11
+--- /dev/null
++++ b/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_005_insights.py
+@@ -0,0 +1,270 @@
++from pathlib import Path
++
++import numpy as np
++import pandas as pd
++from scipy import stats
++
++from task_004_signal_analysis import (
++    INPUT_FILE,
++    compute_monthly_ic,
++    compute_signal_decay,
++    load_data,
++    run_ic_ttest,
++    validate_columns,
++)
++
++
++HIGH_IMBALANCE_QUANTILE = 0.7
++LOW_IMBALANCE_QUANTILE = 0.3
++
++
++def compute_vote_imbalance_effect(df: pd.DataFrame) -> dict[str, float]:
++    required_columns = {"vote_imbalance", "sentiment_score", "return_open"}
++    missing_columns = required_columns.difference(df.columns)
++    if missing_columns:
++        missing_str = ", ".join(sorted(missing_columns))
++        raise ValueError(f"Missing required columns for vote imbalance analysis: {missing_str}")
++
++    high_cutoff = df["vote_imbalance"].quantile(HIGH_IMBALANCE_QUANTILE)
++    low_cutoff = df["vote_imbalance"].quantile(LOW_IMBALANCE_QUANTILE)
++
++    high_sample = df.loc[
++        df["vote_imbalance"] >= high_cutoff,
++        ["sentiment_score", "return_open"],
++    ].dropna()
++    low_sample = df.loc[
++        df["vote_imbalance"] <= low_cutoff,
++        ["sentiment_score", "return_open"],
++    ].dropna()
++
++    high_ic = np.nan
++    low_ic = np.nan
++
++    if len(high_sample) >= 2:
++        high_ic, _ = stats.spearmanr(high_sample["sentiment_score"], high_sample["return_open"])
++    if len(low_sample) >= 2:
++        low_ic, _ = stats.spearmanr(low_sample["sentiment_score"], low_sample["return_open"])
++
++    return {
++        "high_cutoff": high_cutoff,
++        "low_cutoff": low_cutoff,
++        "high_ic": high_ic,
++        "low_ic": low_ic,
++        "high_n": len(high_sample),
++        "low_n": len(low_sample),
++        "ic_spread": high_ic - low_ic if not pd.isna(high_ic) and not pd.isna(low_ic) else np.nan,
++    }
++
++
++def _format_float(value: float) -> str:
++    return f"{value:.4f}" if not pd.isna(value) else "nan"
++
++
++def generate_insights(
++    mean_ic: float,
++    icir: float,
++    decay_df: pd.DataFrame,
++    ic_df: pd.DataFrame,
++    ttest_p_value: float,
++    vote_effect: dict[str, float],
++) -> str:
++    insights: list[str] = []
++
++    if abs(mean_ic) > 0.05 and not pd.isna(icir) and abs(icir) > 0.5 and ttest_p_value < 0.05:
++        pred_conclusion = "情绪信号对次日收益具有统计显著的预测力，且 IC 显著异于 0。"
++    elif abs(mean_ic) > 0.02 and ttest_p_value < 0.10:
++        pred_conclusion = "情绪信号对次日收益具有偏弱但可识别的预测力。"
++    else:
++        pred_conclusion = "情绪信号对次日收益的预测力不显著，统计证据不足。"
++
++    insights.append(f"**1. 统计预测力 Statistical Predictiveness**: {pred_conclusion}")
++    insights.append(
++        "   - "
++        f"Mean IC = {_format_float(mean_ic)}, ICIR = {_format_float(icir)}, "
++        f"t-test p-value = {_format_float(ttest_p_value)}"
++    )
++
++    lag_map = {
++        row["horizon"]: row["ic"]
++        for _, row in decay_df.iterrows()
++    }
++    lag1_ic = lag_map.get("t+1", np.nan)
++    lag2_ic = lag_map.get("t+2", np.nan)
++    lag3_ic = lag_map.get("t+3", np.nan)
++    lag_abs = pd.Series({"t+1": abs(lag1_ic), "t+2": abs(lag2_ic), "t+3": abs(lag3_ic)}).dropna()
++
++    if not lag_abs.empty and lag_abs.idxmax() == "t+1" and lag_abs.loc["t+1"] > 0:
++        decay_conclusion = "信号以短期为主，t+1 的预测力最强，alpha 更可能在 1 至 2 天内衰减。"
++    elif not lag_abs.empty and lag_abs.idxmax() in {"t+2", "t+3"}:
++        decay_conclusion = "信号并非只在次日生效，较长持有期仍保留部分预测力。"
++    else:
++        decay_conclusion = "信号衰减模式不明显，时效性结论仍需谨慎。"
++
++    insights.append(f"\n**2. 信号时效性 Signal Decay**: {decay_conclusion}")
++    insights.append(
++        "   - "
++        f"IC(t+1) = {_format_float(lag1_ic)}, "
++        f"IC(t+2) = {_format_float(lag2_ic)}, "
++        f"IC(t+3) = {_format_float(lag3_ic)}"
++    )
++
++    high_ic = vote_effect["high_ic"]
++    low_ic = vote_effect["low_ic"]
++    ic_spread = vote_effect["ic_spread"]
++    if not pd.isna(high_ic) and not pd.isna(low_ic) and abs(high_ic) > abs(low_ic):
++        vote_conclusion = "高 vote_imbalance 样本的 IC 更强，说明共识度高时信号质量更好，可作为过滤器。"
++    elif not pd.isna(high_ic) and not pd.isna(low_ic):
++        vote_conclusion = "高 vote_imbalance 并未明显提升 IC，情绪强度过滤的增益有限。"
++    else:
++        vote_conclusion = "vote_imbalance 分层样本不足，暂时无法确认强度过滤是否有效。"
++
++    insights.append(f"\n**3. 投票强度 Vote Imbalance**: {vote_conclusion}")
++    insights.append(
++        "   - "
++        f"High group IC = {_format_float(high_ic)} (n={vote_effect['high_n']}), "
++        f"Low group IC = {_format_float(low_ic)} (n={vote_effect['low_n']}), "
++        f"Spread = {_format_float(ic_spread)}"
++    )
++
++    positive_ic_pct = (ic_df["ic"] > 0).mean()
++    if positive_ic_pct >= 0.6 and mean_ic > 0:
++        stability = f"信号在 {positive_ic_pct:.0%} 的月份中保持正向 IC，稳定性较强。"
++    elif positive_ic_pct >= 0.5:
++        stability = f"信号在 {positive_ic_pct:.0%} 的月份中为正，具备一定稳定性但一致性一般。"
++    else:
++        stability = f"信号仅在 {positive_ic_pct:.0%} 的月份中为正，跨市场状态稳定性存疑。"
++
++    insights.append(f"\n**4. 信号稳定性 Signal Stability**: {stability}")
++    insights.append(
++        "   - "
++        f"Positive IC months = {positive_ic_pct:.0%}, Monthly observations = {len(ic_df)}"
++    )
++
++    return "\n".join(insights)
++
++
++def generate_english_summary(
++    mean_ic: float,
++    icir: float,
++    decay_df: pd.DataFrame,
++    ic_df: pd.DataFrame,
++    vote_effect: dict[str, float],
++) -> str:
++    lag_map = {row["horizon"]: row["ic"] for _, row in decay_df.iterrows()}
++    positive_ic_pct = (ic_df["ic"] > 0).mean()
++    return "\n".join(
++        [
++            "- **Predictiveness**: "
++            f"Mean IC = {_format_float(mean_ic)} and ICIR = {_format_float(icir)} summarize the signal's base efficacy.",
++            "- **Decay**: "
++            f"IC(t+1) = {_format_float(lag_map.get('t+1', np.nan))}, "
++            f"IC(t+2) = {_format_float(lag_map.get('t+2', np.nan))}, "
++            f"IC(t+3) = {_format_float(lag_map.get('t+3', np.nan))}.",
++            "- **Vote Imbalance Filter**: "
++            f"High-consensus days show IC = {_format_float(vote_effect['high_ic'])} versus "
++            f"{_format_float(vote_effect['low_ic'])} on low-consensus days.",
++            "- **Stability**: "
++            f"{positive_ic_pct:.0%} of monthly IC observations are positive.",
++        ]
++    )
++
++
++def build_markdown_content(
++    mean_ic: float,
++    icir: float,
++    decay_df: pd.DataFrame,
++    ic_df: pd.DataFrame,
++    ttest_p_value: float,
++    vote_effect: dict[str, float],
++) -> str:
++    insights_text = generate_insights(
++        mean_ic=mean_ic,
++        icir=icir,
++        decay_df=decay_df,
++        ic_df=ic_df,
++        ttest_p_value=ttest_p_value,
++        vote_effect=vote_effect,
++    )
++    english_summary = generate_english_summary(
++        mean_ic=mean_ic,
++        icir=icir,
++        decay_df=decay_df,
++        ic_df=ic_df,
++        vote_effect=vote_effect,
++    )
++
++    lag_map = {row["horizon"]: row["ic"] for _, row in decay_df.iterrows()}
++    return f"""
++## 6. Signal Analysis Insights
++
++### Key Findings | 核心洞察
++
++{insights_text}
++
++### Interpretation for Trading | 交易含义
++
++Based on the signal analysis:
++- **Entry**: Use daily sentiment score as the primary signal.
++- **Signal Quality**: ICIR = {_format_float(icir)}.
++- **Decay**: IC(t+1) = {_format_float(lag_map.get("t+1", np.nan))}, suggesting focus on short-horizon positioning when the front-end IC is strongest.
++- **Filter**: Use `vote_imbalance` as a quality filter when high-consensus days show stronger IC.
++
++### English Summary
++
++{english_summary}
++""".strip()
++
++
++def main() -> None:
++    input_path = Path(INPUT_FILE)
++    if not input_path.exists():
++        raise FileNotFoundError(
++            f"Input file not found: {input_path.resolve()}. "
++            "Run task_002_feature_engineering.py first to generate hsi_features.csv."
++        )
++
++    df = load_data(str(input_path))
++    validate_columns(df)
++
++    ic_df = compute_monthly_ic(df)
++    decay_df = compute_signal_decay(df)
++    metrics = {
++        "mean_ic": ic_df["ic"].mean(),
++        "std_ic": ic_df["ic"].std(),
++    }
++    metrics["icir"] = (
++        np.nan
++        if pd.isna(metrics["std_ic"]) or np.isclose(metrics["std_ic"], 0)
++        else metrics["mean_ic"] / metrics["std_ic"]
++    )
++    _, ttest_p_value = run_ic_ttest(ic_df)
++    vote_effect = compute_vote_imbalance_effect(df)
++
++    insight_report = generate_insights(
++        mean_ic=metrics["mean_ic"],
++        icir=metrics["icir"],
++        decay_df=decay_df,
++        ic_df=ic_df,
++        ttest_p_value=ttest_p_value,
++        vote_effect=vote_effect,
++    )
++
++    print("=" * 60)
++    print("SIGNAL ANALYSIS INSIGHTS")
++    print("=" * 60)
++    print(insight_report)
++    print("=" * 60)
++
++    markdown_content = build_markdown_content(
++        mean_ic=metrics["mean_ic"],
++        icir=metrics["icir"],
++        decay_df=decay_df,
++        ic_df=ic_df,
++        ttest_p_value=ttest_p_value,
++        vote_effect=vote_effect,
++    )
++    print(markdown_content)
++
++
++if __name__ == "__main__":
++    main()
+
+file update:
+diff --git a/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_005_insights.py b/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_005_insights.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..e58b6d2fb3c06ec56bb21e0ded8dc11e85f6aa11
+--- /dev/null
++++ b/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_005_insights.py
+@@ -0,0 +1,270 @@
++from pathlib import Path
++
++import numpy as np
++import pandas as pd
++from scipy import stats
++
++from task_004_signal_analysis import (
++    INPUT_FILE,
++    compute_monthly_ic,
++    compute_signal_decay,
++    load_data,
++    run_ic_ttest,
++    validate_columns,
++)
++
++
++HIGH_IMBALANCE_QUANTILE = 0.7
++LOW_IMBALANCE_QUANTILE = 0.3
++
++
++def compute_vote_imbalance_effect(df: pd.DataFrame) -> dict[str, float]:
++    required_columns = {"vote_imbalance", "sentiment_score", "return_open"}
++    missing_columns = required_columns.difference(df.columns)
++    if missing_columns:
++        missing_str = ", ".join(sorted(missing_columns))
++        raise ValueError(f"Missing required columns for vote imbalance analysis: {missing_str}")
++
++    high_cutoff = df["vote_imbalance"].quantile(HIGH_IMBALANCE_QUANTILE)
++    low_cutoff = df["vote_imbalance"].quantile(LOW_IMBALANCE_QUANTILE)
++
++    high_sample = df.loc[
++        df["vote_imbalance"] >= high_cutoff,
++        ["sentiment_score", "return_open"],
++    ].dropna()
++    low_sample = df.loc[
++        df["vote_imbalance"] <= low_cutoff,
++        ["sentiment_score", "return_open"],
++    ].dropna()
++
++    high_ic = np.nan
++    low_ic = np.nan
++
++    if len(high_sample) >= 2:
++        high_ic, _ = stats.spearmanr(high_sample["sentiment_score"], high_sample["return_open"])
++    if len(low_sample) >= 2:
++        low_ic, _ = stats.spearmanr(low_sample["sentiment_score"], low_sample["return_open"])
++
++    return {
++        "high_cutoff": high_cutoff,
++        "low_cutoff": low_cutoff,
++        "high_ic": high_ic,
++        "low_ic": low_ic,
++        "high_n": len(high_sample),
++        "low_n": len(low_sample),
++        "ic_spread": high_ic - low_ic if not pd.isna(high_ic) and not pd.isna(low_ic) else np.nan,
++    }
++
++
++def _format_float(value: float) -> str:
++    return f"{value:.4f}" if not pd.isna(value) else "nan"
++
++
++def generate_insights(
++    mean_ic: float,
++    icir: float,
++    decay_df: pd.DataFrame,
++    ic_df: pd.DataFrame,
++    ttest_p_value: float,
++    vote_effect: dict[str, float],
++) -> str:
++    insights: list[str] = []
++
++    if abs(mean_ic) > 0.05 and not pd.isna(icir) and abs(icir) > 0.5 and ttest_p_value < 0.05:
++        pred_conclusion = "情绪信号对次日收益具有统计显著的预测力，且 IC 显著异于 0。"
++    elif abs(mean_ic) > 0.02 and ttest_p_value < 0.10:
++        pred_conclusion = "情绪信号对次日收益具有偏弱但可识别的预测力。"
++    else:
++        pred_conclusion = "情绪信号对次日收益的预测力不显著，统计证据不足。"
++
++    insights.append(f"**1. 统计预测力 Statistical Predictiveness**: {pred_conclusion}")
++    insights.append(
++        "   - "
++        f"Mean IC = {_format_float(mean_ic)}, ICIR = {_format_float(icir)}, "
++        f"t-test p-value = {_format_float(ttest_p_value)}"
++    )
++
++    lag_map = {
++        row["horizon"]: row["ic"]
++        for _, row in decay_df.iterrows()
++    }
++    lag1_ic = lag_map.get("t+1", np.nan)
++    lag2_ic = lag_map.get("t+2", np.nan)
++    lag3_ic = lag_map.get("t+3", np.nan)
++    lag_abs = pd.Series({"t+1": abs(lag1_ic), "t+2": abs(lag2_ic), "t+3": abs(lag3_ic)}).dropna()
++
++    if not lag_abs.empty and lag_abs.idxmax() == "t+1" and lag_abs.loc["t+1"] > 0:
++        decay_conclusion = "信号以短期为主，t+1 的预测力最强，alpha 更可能在 1 至 2 天内衰减。"
++    elif not lag_abs.empty and lag_abs.idxmax() in {"t+2", "t+3"}:
++        decay_conclusion = "信号并非只在次日生效，较长持有期仍保留部分预测力。"
++    else:
++        decay_conclusion = "信号衰减模式不明显，时效性结论仍需谨慎。"
++
++    insights.append(f"\n**2. 信号时效性 Signal Decay**: {decay_conclusion}")
++    insights.append(
++        "   - "
++        f"IC(t+1) = {_format_float(lag1_ic)}, "
++        f"IC(t+2) = {_format_float(lag2_ic)}, "
++        f"IC(t+3) = {_format_float(lag3_ic)}"
++    )
++
++    high_ic = vote_effect["high_ic"]
++    low_ic = vote_effect["low_ic"]
++    ic_spread = vote_effect["ic_spread"]
++    if not pd.isna(high_ic) and not pd.isna(low_ic) and abs(high_ic) > abs(low_ic):
++        vote_conclusion = "高 vote_imbalance 样本的 IC 更强，说明共识度高时信号质量更好，可作为过滤器。"
++    elif not pd.isna(high_ic) and not pd.isna(low_ic):
++        vote_conclusion = "高 vote_imbalance 并未明显提升 IC，情绪强度过滤的增益有限。"
++    else:
++        vote_conclusion = "vote_imbalance 分层样本不足，暂时无法确认强度过滤是否有效。"
++
++    insights.append(f"\n**3. 投票强度 Vote Imbalance**: {vote_conclusion}")
++    insights.append(
++        "   - "
++        f"High group IC = {_format_float(high_ic)} (n={vote_effect['high_n']}), "
++        f"Low group IC = {_format_float(low_ic)} (n={vote_effect['low_n']}), "
++        f"Spread = {_format_float(ic_spread)}"
++    )
++
++    positive_ic_pct = (ic_df["ic"] > 0).mean()
++    if positive_ic_pct >= 0.6 and mean_ic > 0:
++        stability = f"信号在 {positive_ic_pct:.0%} 的月份中保持正向 IC，稳定性较强。"
++    elif positive_ic_pct >= 0.5:
++        stability = f"信号在 {positive_ic_pct:.0%} 的月份中为正，具备一定稳定性但一致性一般。"
++    else:
++        stability = f"信号仅在 {positive_ic_pct:.0%} 的月份中为正，跨市场状态稳定性存疑。"
++
++    insights.append(f"\n**4. 信号稳定性 Signal Stability**: {stability}")
++    insights.append(
++        "   - "
++        f"Positive IC months = {positive_ic_pct:.0%}, Monthly observations = {len(ic_df)}"
++    )
++
++    return "\n".join(insights)
++
++
++def generate_english_summary(
++    mean_ic: float,
++    icir: float,
++    decay_df: pd.DataFrame,
++    ic_df: pd.DataFrame,
++    vote_effect: dict[str, float],
++) -> str:
++    lag_map = {row["horizon"]: row["ic"] for _, row in decay_df.iterrows()}
++    positive_ic_pct = (ic_df["ic"] > 0).mean()
++    return "\n".join(
++        [
++            "- **Predictiveness**: "
++            f"Mean IC = {_format_float(mean_ic)} and ICIR = {_format_float(icir)} summarize the signal's base efficacy.",
++            "- **Decay**: "
++            f"IC(t+1) = {_format_float(lag_map.get('t+1', np.nan))}, "
++            f"IC(t+2) = {_format_float(lag_map.get('t+2', np.nan))}, "
++            f"IC(t+3) = {_format_float(lag_map.get('t+3', np.nan))}.",
++            "- **Vote Imbalance Filter**: "
++            f"High-consensus days show IC = {_format_float(vote_effect['high_ic'])} versus "
++            f"{_format_float(vote_effect['low_ic'])} on low-consensus days.",
++            "- **Stability**: "
++            f"{positive_ic_pct:.0%} of monthly IC observations are positive.",
++        ]
++    )
++
++
++def build_markdown_content(
++    mean_ic: float,
++    icir: float,
++    decay_df: pd.DataFrame,
++    ic_df: pd.DataFrame,
++    ttest_p_value: float,
++    vote_effect: dict[str, float],
++) -> str:
++    insights_text = generate_insights(
++        mean_ic=mean_ic,
++        icir=icir,
++        decay_df=decay_df,
++        ic_df=ic_df,
++        ttest_p_value=ttest_p_value,
++        vote_effect=vote_effect,
++    )
++    english_summary = generate_english_summary(
++        mean_ic=mean_ic,
++        icir=icir,
++        decay_df=decay_df,
++        ic_df=ic_df,
++        vote_effect=vote_effect,
++    )
++
++    lag_map = {row["horizon"]: row["ic"] for _, row in decay_df.iterrows()}
++    return f"""
++## 6. Signal Analysis Insights
++
++### Key Findings | 核心洞察
++
++{insights_text}
++
++### Interpretation for Trading | 交易含义
++
++Based on the signal analysis:
++- **Entry**: Use daily sentiment score as the primary signal.
++- **Signal Quality**: ICIR = {_format_float(icir)}.
++- **Decay**: IC(t+1) = {_format_float(lag_map.get("t+1", np.nan))}, suggesting focus on short-horizon positioning when the front-end IC is strongest.
++- **Filter**: Use `vote_imbalance` as a quality filter when high-consensus days show stronger IC.
++
++### English Summary
++
++{english_summary}
++""".strip()
++
++
++def main() -> None:
++    input_path = Path(INPUT_FILE)
++    if not input_path.exists():
++        raise FileNotFoundError(
++            f"Input file not found: {input_path.resolve()}. "
++            "Run task_002_feature_engineering.py first to generate hsi_features.csv."
++        )
++
++    df = load_data(str(input_path))
++    validate_columns(df)
++
++    ic_df = compute_monthly_ic(df)
++    decay_df = compute_signal_decay(df)
++    metrics = {
++        "mean_ic": ic_df["ic"].mean(),
++        "std_ic": ic_df["ic"].std(),
++    }
++    metrics["icir"] = (
++        np.nan
++        if pd.isna(metrics["std_ic"]) or np.isclose(metrics["std_ic"], 0)
++        else metrics["mean_ic"] / metrics["std_ic"]
++    )
++    _, ttest_p_value = run_ic_ttest(ic_df)
++    vote_effect = compute_vote_imbalance_effect(df)
++
++    insight_report = generate_insights(
++        mean_ic=metrics["mean_ic"],
++        icir=metrics["icir"],
++        decay_df=decay_df,
++        ic_df=ic_df,
++        ttest_p_value=ttest_p_value,
++        vote_effect=vote_effect,
++    )
++
++    print("=" * 60)
++    print("SIGNAL ANALYSIS INSIGHTS")
++    print("=" * 60)
++    print(insight_report)
++    print("=" * 60)
++
++    markdown_content = build_markdown_content(
++        mean_ic=metrics["mean_ic"],
++        icir=metrics["icir"],
++        decay_df=decay_df,
++        ic_df=ic_df,
++        ttest_p_value=ttest_p_value,
++        vote_effect=vote_effect,
++    )
++    print(markdown_content)
++
++
++if __name__ == "__main__":
++    main()
+
+codex
+脚本已经写好，下一步做静态校验，确认导入、类型和字符串输出都没问题；如果本地还没有 `hsi_features.csv`，我就只做语法级验证。
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command 'python -m py_compile task_005_insights.py task_004_signal_analysis.py' in C:\Coding\AI-factory-projects\quantitative-research-workflow\codeexec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command 'Get-Content task_005_insights.py' in C:\Coding\AI-factory-projects\quantitative-research-workflow\code succeeded in 338ms:
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+from scipy import stats
+
+from task_004_signal_analysis import (
+    INPUT_FILE,
+    compute_monthly_ic,
+    compute_signal_decay,
+    load_data,
+    run_ic_ttest,
+    validate_columns,
+)
+
+
+HIGH_IMBALANCE_QUANTILE = 0.7
+LOW_IMBALANCE_QUANTILE = 0.3
+
+
+ succeeded in 356ms:
+
+file update:
+diff --git a/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_005_insights.py b/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_005_insights.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..e58b6d2fb3c06ec56bb21e0ded8dc11e85f6aa11
+--- /dev/null
++++ b/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_005_insights.py
+@@ -0,0 +1,270 @@
++from pathlib import Path
++
++import numpy as np
++import pandas as pd
++from scipy import stats
++
++from task_004_signal_analysis import (
++    INPUT_FILE,
++    compute_monthly_ic,
++    compute_signal_decay,
++    load_data,
++    run_ic_ttest,
++    validate_columns,
++)
++
++
++HIGH_IMBALANCE_QUANTILE = 0.7
++LOW_IMBALANCE_QUANTILE = 0.3
++
++
++def compute_vote_imbalance_effect(df: pd.DataFrame) -> dict[str, float]:
++    required_columns = {"vote_imbalance", "sentiment_score", "return_open"}
++    missing_columns = required_columns.difference(df.columns)
++    if missing_columns:
++        missing_str = ", ".join(sorted(missing_columns))
++        raise ValueError(f"Missing required columns for vote imbalance analysis: {missing_str}")
++
++    high_cutoff = df["vote_imbalance"].quantile(HIGH_IMBALANCE_QUANTILE)
++    low_cutoff = df["vote_imbalance"].quantile(LOW_IMBALANCE_QUANTILE)
++
++    high_sample = df.loc[
++        df["vote_imbalance"] >= high_cutoff,
++        ["sentiment_score", "return_open"],
++    ].dropna()
++    low_sample = df.loc[
++        df["vote_imbalance"] <= low_cutoff,
++        ["sentiment_score", "return_open"],
++    ].dropna()
++
++    high_ic = np.nan
++    low_ic = np.nan
++
++    if len(high_sample) >= 2:
++        high_ic, _ = stats.spearmanr(high_sample["sentiment_score"], high_sample["return_open"])
++    if len(low_sample) >= 2:
++        low_ic, _ = stats.spearmanr(low_sample["sentiment_score"], low_sample["return_open"])
++
++    return {
++        "high_cutoff": high_cutoff,
++        "low_cutoff": low_cutoff,
++        "high_ic": high_ic,
++        "low_ic": low_ic,
++        "high_n": len(high_sample),
++        "low_n": len(low_sample),
++        "ic_spread": high_ic - low_ic if not pd.isna(high_ic) and not pd.isna(low_ic) else np.nan,
++    }
++
++
++def _format_float(value: float) -> str:
++    return f"{value:.4f}" if not pd.isna(value) else "nan"
++
++
++def generate_insights(
++    mean_ic: float,
++    icir: float,
++    decay_df: pd.DataFrame,
++    ic_df: pd.DataFrame,
++    ttest_p_value: float,
++    vote_effect: dict[str, float],
++) -> str:
++    insights: list[str] = []
++
++    if abs(mean_ic) > 0.05 and not pd.isna(icir) and abs(icir) > 0.5 and ttest_p_value < 0.05:
++        pred_conclusion = "情绪信号对次日收益具有统计显著的预测力，且 IC 显著异于 0。"
++    elif abs(mean_ic) > 0.02 and ttest_p_value < 0.10:
++        pred_conclusion = "情绪信号对次日收益具有偏弱但可识别的预测力。"
++    else:
++        pred_conclusion = "情绪信号对次日收益的预测力不显著，统计证据不足。"
++
++    insights.append(f"**1. 统计预测力 Statistical Predictiveness**: {pred_conclusion}")
++    insights.append(
++        "   - "
++        f"Mean IC = {_format_float(mean_ic)}, ICIR = {_format_float(icir)}, "
++        f"t-test p-value = {_format_float(ttest_p_value)}"
++    )
++
++    lag_map = {
++        row["horizon"]: row["ic"]
++        for _, row in decay_df.iterrows()
++    }
++    lag1_ic = lag_map.get("t+1", np.nan)
++    lag2_ic = lag_map.get("t+2", np.nan)
++    lag3_ic = lag_map.get("t+3", np.nan)
++    lag_abs = pd.Series({"t+1": abs(lag1_ic), "t+2": abs(lag2_ic), "t+3": abs(lag3_ic)}).dropna()
++
++    if not lag_abs.empty and lag_abs.idxmax() == "t+1" and lag_abs.loc["t+1"] > 0:
++        decay_conclusion = "信号以短期为主，t+1 的预测力最强，alpha 更可能在 1 至 2 天内衰减。"
++    elif not lag_abs.empty and lag_abs.idxmax() in {"t+2", "t+3"}:
++        decay_conclusion = "信号并非只在次日生效，较长持有期仍保留部分预测力。"
++    else:
++        decay_conclusion = "信号衰减模式不明显，时效性结论仍需谨慎。"
++
++    insights.append(f"\n**2. 信号时效性 Signal Decay**: {decay_conclusion}")
++    insights.append(
++        "   - "
++        f"IC(t+1) = {_format_float(lag1_ic)}, "
++        f"IC(t+2) = {_format_float(lag2_ic)}, "
++        f"IC(t+3) = {_format_float(lag3_ic)}"
++    )
++
++    high_ic = vote_effect["high_ic"]
++    low_ic = vote_effect["low_ic"]
++    ic_spread = vote_effect["ic_spread"]
++    if not pd.isna(high_ic) and not pd.isna(low_ic) and abs(high_ic) > abs(low_ic):
++        vote_conclusion = "高 vote_imbalance 样本的 IC 更强，说明共识度高时信号质量更好，可作为过滤器。"
++    elif not pd.isna(high_ic) and not pd.isna(low_ic):
++        vote_conclusion = "高 vote_imbalance 并未明显提升 IC，情绪强度过滤的增益有限。"
++    else:
++        vote_conclusion = "vote_imbalance 分层样本不足，暂时无法确认强度过滤是否有效。"
++
++    insights.append(f"\n**3. 投票强度 Vote Imbalance**: {vote_conclusion}")
++    insights.append(
++        "   - "
++        f"High group IC = {_format_float(high_ic)} (n={vote_effect['high_n']}), "
++        f"Low group IC = {_format_float(low_ic)} (n={vote_effect['low_n']}), "
++        f"Spread = {_format_float(ic_spread)}"
++    )
++
++    positive_ic_pct = (ic_df["ic"] > 0).mean()
++    if positive_ic_pct >= 0.6 and mean_ic > 0:
++        stability = f"信号在 {positive_ic_pct:.0%} 的月份中保持正向 IC，稳定性较强。"
++    elif positive_ic_pct >= 0.5:
++        stability = f"信号在 {positive_ic_pct:.0%} 的月份中为正，具备一定稳定性但一致性一般。"
++    else:
++        stability = f"信号仅在 {positive_ic_pct:.0%} 的月份中为正，跨市场状态稳定性存疑。"
++
++    insights.append(f"\n**4. 信号稳定性 Signal Stability**: {stability}")
++    insights.append(
++        "   - "
++        f"Positive IC months = {positive_ic_pct:.0%}, Monthly observations = {len(ic_df)}"
++    )
++
++    return "\n".join(insights)
++
++
++def generate_english_summary(
++    mean_ic: float,
++    icir: float,
++    decay_df: pd.DataFrame,
++    ic_df: pd.DataFrame,
++    vote_effect: dict[str, float],
++) -> str:
++    lag_map = {row["horizon"]: row["ic"] for _, row in decay_df.iterrows()}
++    positive_ic_pct = (ic_df["ic"] > 0).mean()
++    return "\n".join(
++        [
++            "- **Predictiveness**: "
++            f"Mean IC = {_format_float(mean_ic)} and ICIR = {_format_float(icir)} summarize the signal's base efficacy.",
++            "- **Decay**: "
++            f"IC(t+1) = {_format_float(lag_map.get('t+1', np.nan))}, "
++            f"IC(t+2) = {_format_float(lag_map.get('t+2', np.nan))}, "
++            f"IC(t+3) = {_format_float(lag_map.get('t+3', np.nan))}.",
++            "- **Vote Imbalance Filter**: "
++            f"High-consensus days show IC = {_format_float(vote_effect['high_ic'])} versus "
++            f"{_format_float(vote_effect['low_ic'])} on low-consensus days.",
++            "- **Stability**: "
++            f"{positive_ic_pct:.0%} of monthly IC observations are positive.",
++        ]
++    )
++
++
++def build_markdown_content(
++    mean_ic: float,
++    icir: float,
++    decay_df: pd.DataFrame,
++    ic_df: pd.DataFrame,
++    ttest_p_value: float,
++    vote_effect: dict[str, float],
++) -> str:
++    insights_text = generate_insights(
++        mean_ic=mean_ic,
++        icir=icir,
++        decay_df=decay_df,
++        ic_df=ic_df,
++        ttest_p_value=ttest_p_value,
++        vote_effect=vote_effect,
++    )
++    english_summary = generate_english_summary(
++        mean_ic=mean_ic,
++        icir=icir,
++        decay_df=decay_df,
++        ic_df=ic_df,
++        vote_effect=vote_effect,
++    )
++
++    lag_map = {row["horizon"]: row["ic"] for _, row in decay_df.iterrows()}
++    return f"""
++## 6. Signal Analysis Insights
++
++### Key Findings | 核心洞察
++
++{insights_text}
++
++### Interpretation for Trading | 交易含义
++
++Based on the signal analysis:
++- **Entry**: Use daily sentiment score as the primary signal.
++- **Signal Quality**: ICIR = {_format_float(icir)}.
++- **Decay**: IC(t+1) = {_format_float(lag_map.get("t+1", np.nan))}, suggesting focus on short-horizon positioning when the front-end IC is strongest.
++- **Filter**: Use `vote_imbalance` as a quality filter when high-consensus days show stronger IC.
++
++### English Summary
++
++{english_summary}
++""".strip()
++
++
++def main() -> None:
++    input_path = Path(INPUT_FILE)
++    if not input_path.exists():
++        raise FileNotFoundError(
++            f"Input file not found: {input_path.resolve()}. "
++            "Run task_002_feature_engineering.py first to generate hsi_features.csv."
++        )
++
++    df = load_data(str(input_path))
++    validate_columns(df)
++
++    ic_df = compute_monthly_ic(df)
++    decay_df = compute_signal_decay(df)
++    metrics = {
++        "mean_ic": ic_df["ic"].mean(),
++        "std_ic": ic_df["ic"].std(),
++    }
++    metrics["icir"] = (
++        np.nan
++        if pd.isna(metrics["std_ic"]) or np.isclose(metrics["std_ic"], 0)
++        else metrics["mean_ic"] / metrics["std_ic"]
++    )
++    _, ttest_p_value = run_ic_ttest(ic_df)
++    vote_effect = compute_vote_imbalance_effect(df)
++
++    insight_report = generate_insights(
++        mean_ic=metrics["mean_ic"],
++        icir=metrics["icir"],
++        decay_df=decay_df,
++        ic_df=ic_df,
++        ttest_p_value=ttest_p_value,
++        vote_effect=vote_effect,
++    )
++
++    print("=" * 60)
++    print("SIGNAL ANALYSIS INSIGHTS")
++    print("=" * 60)
++    print(insight_report)
++    print("=" * 60)
++
++    markdown_content = build_markdown_content(
++        mean_ic=metrics["mean_ic"],
++        icir=metrics["icir"],
++        decay_df=decay_df,
++        ic_df=ic_df,
++        ttest_p_value=ttest_p_value,
++        vote_effect=vote_effect,
++    )
++    print(markdown_content)
++
++
++if __name__ == "__main__":
++    main()
+
+codex
+已新增 [task_005_insights.py](C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_005_insights.py)。这个脚本会重新加载 `hsi_features.csv`，复用 [task_004_signal_analysis.py](C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_004_signal_analysis.py) 的 `monthly IC` 和 `signal decay` 计算口径，再动态生成 4 个维度的 Insight，并打印可直接嵌入 Notebook 的 Markdown 内容。
+
+这次补充的点有两个。第一，结论不再硬编码，`统计预测力 / 信号时效性 / 投票强度 / 信号稳定性` 都按实际数值分支生成。第二，`投票强度` 不是固定文案，而是按 `vote_imbalance` 高低分组后重新算 IC，判断高共识样本是否真的更可靠。
+
+已做的验证只有语法级检查：`python -m py_compile task_005_insights.py task_004_signal_analysis.py` 通过。当前工作目录里还没有 `hsi_features.csv`，所以我没有执行实数值运行；把该文件放到 `code/` 下后，直接运行 `python task_005_insights.py` 即可输出完整 Insight 报告和 Notebook Markdown。
+file update:
+diff --git a/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_005_insights.py b/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_005_insights.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..e58b6d2fb3c06ec56bb21e0ded8dc11e85f6aa11
+--- /dev/null
++++ b/C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_005_insights.py
+@@ -0,0 +1,270 @@
++from pathlib import Path
++
++import numpy as np
++import pandas as pd
++from scipy import stats
++
++from task_004_signal_analysis import (
++    INPUT_FILE,
++    compute_monthly_ic,
++    compute_signal_decay,
++    load_data,
++    run_ic_ttest,
++    validate_columns,
++)
++
++
++HIGH_IMBALANCE_QUANTILE = 0.7
++LOW_IMBALANCE_QUANTILE = 0.3
++
++
++def compute_vote_imbalance_effect(df: pd.DataFrame) -> dict[str, float]:
++    required_columns = {"vote_imbalance", "sentiment_score", "return_open"}
++    missing_columns = required_columns.difference(df.columns)
++    if missing_columns:
++        missing_str = ", ".join(sorted(missing_columns))
++        raise ValueError(f"Missing required columns for vote imbalance analysis: {missing_str}")
++
++    high_cutoff = df["vote_imbalance"].quantile(HIGH_IMBALANCE_QUANTILE)
++    low_cutoff = df["vote_imbalance"].quantile(LOW_IMBALANCE_QUANTILE)
++
++    high_sample = df.loc[
++        df["vote_imbalance"] >= high_cutoff,
++        ["sentiment_score", "return_open"],
++    ].dropna()
++    low_sample = df.loc[
++        df["vote_imbalance"] <= low_cutoff,
++        ["sentiment_score", "return_open"],
++    ].dropna()
++
++    high_ic = np.nan
++    low_ic = np.nan
++
++    if len(high_sample) >= 2:
++        high_ic, _ = stats.spearmanr(high_sample["sentiment_score"], high_sample["return_open"])
++    if len(low_sample) >= 2:
++        low_ic, _ = stats.spearmanr(low_sample["sentiment_score"], low_sample["return_open"])
++
++    return {
++        "high_cutoff": high_cutoff,
++        "low_cutoff": low_cutoff,
++        "high_ic": high_ic,
++        "low_ic": low_ic,
++        "high_n": len(high_sample),
++        "low_n": len(low_sample),
++        "ic_spread": high_ic - low_ic if not pd.isna(high_ic) and not pd.isna(low_ic) else np.nan,
++    }
++
++
++def _format_float(value: float) -> str:
++    return f"{value:.4f}" if not pd.isna(value) else "nan"
++
++
++def generate_insights(
++    mean_ic: float,
++    icir: float,
++    decay_df: pd.DataFrame,
++    ic_df: pd.DataFrame,
++    ttest_p_value: float,
++    vote_effect: dict[str, float],
++) -> str:
++    insights: list[str] = []
++
++    if abs(mean_ic) > 0.05 and not pd.isna(icir) and abs(icir) > 0.5 and ttest_p_value < 0.05:
++        pred_conclusion = "情绪信号对次日收益具有统计显著的预测力，且 IC 显著异于 0。"
++    elif abs(mean_ic) > 0.02 and ttest_p_value < 0.10:
++        pred_conclusion = "情绪信号对次日收益具有偏弱但可识别的预测力。"
++    else:
++        pred_conclusion = "情绪信号对次日收益的预测力不显著，统计证据不足。"
++
++    insights.append(f"**1. 统计预测力 Statistical Predictiveness**: {pred_conclusion}")
++    insights.append(
++        "   - "
++        f"Mean IC = {_format_float(mean_ic)}, ICIR = {_format_float(icir)}, "
++        f"t-test p-value = {_format_float(ttest_p_value)}"
++    )
++
++    lag_map = {
++        row["horizon"]: row["ic"]
++        for _, row in decay_df.iterrows()
++    }
++    lag1_ic = lag_map.get("t+1", np.nan)
++    lag2_ic = lag_map.get("t+2", np.nan)
++    lag3_ic = lag_map.get("t+3", np.nan)
++    lag_abs = pd.Series({"t+1": abs(lag1_ic), "t+2": abs(lag2_ic), "t+3": abs(lag3_ic)}).dropna()
++
++    if not lag_abs.empty and lag_abs.idxmax() == "t+1" and lag_abs.loc["t+1"] > 0:
++        decay_conclusion = "信号以短期为主，t+1 的预测力最强，alpha 更可能在 1 至 2 天内衰减。"
++    elif not lag_abs.empty and lag_abs.idxmax() in {"t+2", "t+3"}:
++        decay_conclusion = "信号并非只在次日生效，较长持有期仍保留部分预测力。"
++    else:
++        decay_conclusion = "信号衰减模式不明显，时效性结论仍需谨慎。"
++
++    insights.append(f"\n**2. 信号时效性 Signal Decay**: {decay_conclusion}")
++    insights.append(
++        "   - "
++        f"IC(t+1) = {_format_float(lag1_ic)}, "
++        f"IC(t+2) = {_format_float(lag2_ic)}, "
++        f"IC(t+3) = {_format_float(lag3_ic)}"
++    )
++
++    high_ic = vote_effect["high_ic"]
++    low_ic = vote_effect["low_ic"]
++    ic_spread = vote_effect["ic_spread"]
++    if not pd.isna(high_ic) and not pd.isna(low_ic) and abs(high_ic) > abs(low_ic):
++        vote_conclusion = "高 vote_imbalance 样本的 IC 更强，说明共识度高时信号质量更好，可作为过滤器。"
++    elif not pd.isna(high_ic) and not pd.isna(low_ic):
++        vote_conclusion = "高 vote_imbalance 并未明显提升 IC，情绪强度过滤的增益有限。"
++    else:
++        vote_conclusion = "vote_imbalance 分层样本不足，暂时无法确认强度过滤是否有效。"
++
++    insights.append(f"\n**3. 投票强度 Vote Imbalance**: {vote_conclusion}")
++    insights.append(
++        "   - "
++        f"High group IC = {_format_float(high_ic)} (n={vote_effect['high_n']}), "
++        f"Low group IC = {_format_float(low_ic)} (n={vote_effect['low_n']}), "
++        f"Spread = {_format_float(ic_spread)}"
++    )
++
++    positive_ic_pct = (ic_df["ic"] > 0).mean()
++    if positive_ic_pct >= 0.6 and mean_ic > 0:
++        stability = f"信号在 {positive_ic_pct:.0%} 的月份中保持正向 IC，稳定性较强。"
++    elif positive_ic_pct >= 0.5:
++        stability = f"信号在 {positive_ic_pct:.0%} 的月份中为正，具备一定稳定性但一致性一般。"
++    else:
++        stability = f"信号仅在 {positive_ic_pct:.0%} 的月份中为正，跨市场状态稳定性存疑。"
++
++    insights.append(f"\n**4. 信号稳定性 Signal Stability**: {stability}")
++    insights.append(
++        "   - "
++        f"Positive IC months = {positive_ic_pct:.0%}, Monthly observations = {len(ic_df)}"
++    )
++
++    return "\n".join(insights)
++
++
++def generate_english_summary(
++    mean_ic: float,
++    icir: float,
++    decay_df: pd.DataFrame,
++    ic_df: pd.DataFrame,
++    vote_effect: dict[str, float],
++) -> str:
++    lag_map = {row["horizon"]: row["ic"] for _, row in decay_df.iterrows()}
++    positive_ic_pct = (ic_df["ic"] > 0).mean()
++    return "\n".join(
++        [
++            "- **Predictiveness**: "
++            f"Mean IC = {_format_float(mean_ic)} and ICIR = {_format_float(icir)} summarize the signal's base efficacy.",
++            "- **Decay**: "
++            f"IC(t+1) = {_format_float(lag_map.get('t+1', np.nan))}, "
++            f"IC(t+2) = {_format_float(lag_map.get('t+2', np.nan))}, "
++            f"IC(t+3) = {_format_float(lag_map.get('t+3', np.nan))}.",
++            "- **Vote Imbalance Filter**: "
++            f"High-consensus days show IC = {_format_float(vote_effect['high_ic'])} versus "
++            f"{_format_float(vote_effect['low_ic'])} on low-consensus days.",
++            "- **Stability**: "
++            f"{positive_ic_pct:.0%} of monthly IC observations are positive.",
++        ]
++    )
++
++
++def build_markdown_content(
++    mean_ic: float,
++    icir: float,
++    decay_df: pd.DataFrame,
++    ic_df: pd.DataFrame,
++    ttest_p_value: float,
++    vote_effect: dict[str, float],
++) -> str:
++    insights_text = generate_insights(
++        mean_ic=mean_ic,
++        icir=icir,
++        decay_df=decay_df,
++        ic_df=ic_df,
++        ttest_p_value=ttest_p_value,
++        vote_effect=vote_effect,
++    )
++    english_summary = generate_english_summary(
++        mean_ic=mean_ic,
++        icir=icir,
++        decay_df=decay_df,
++        ic_df=ic_df,
++        vote_effect=vote_effect,
++    )
++
++    lag_map = {row["horizon"]: row["ic"] for _, row in decay_df.iterrows()}
++    return f"""
++## 6. Signal Analysis Insights
++
++### Key Findings | 核心洞察
++
++{insights_text}
++
++### Interpretation for Trading | 交易含义
++
++Based on the signal analysis:
++- **Entry**: Use daily sentiment score as the primary signal.
++- **Signal Quality**: ICIR = {_format_float(icir)}.
++- **Decay**: IC(t+1) = {_format_float(lag_map.get("t+1", np.nan))}, suggesting focus on short-horizon positioning when the front-end IC is strongest.
++- **Filter**: Use `vote_imbalance` as a quality filter when high-consensus days show stronger IC.
++
++### English Summary
++
++{english_summary}
++""".strip()
++
++
++def main() -> None:
++    input_path = Path(INPUT_FILE)
++    if not input_path.exists():
++        raise FileNotFoundError(
++            f"Input file not found: {input_path.resolve()}. "
++            "Run task_002_feature_engineering.py first to generate hsi_features.csv."
++        )
++
++    df = load_data(str(input_path))
++    validate_columns(df)
++
++    ic_df = compute_monthly_ic(df)
++    decay_df = compute_signal_decay(df)
++    metrics = {
++        "mean_ic": ic_df["ic"].mean(),
++        "std_ic": ic_df["ic"].std(),
++    }
++    metrics["icir"] = (
++        np.nan
++        if pd.isna(metrics["std_ic"]) or np.isclose(metrics["std_ic"], 0)
++        else metrics["mean_ic"] / metrics["std_ic"]
++    )
++    _, ttest_p_value = run_ic_ttest(ic_df)
++    vote_effect = compute_vote_imbalance_effect(df)
++
++    insight_report = generate_insights(
++        mean_ic=metrics["mean_ic"],
++        icir=metrics["icir"],
++        decay_df=decay_df,
++        ic_df=ic_df,
++        ttest_p_value=ttest_p_value,
++        vote_effect=vote_effect,
++    )
++
++    print("=" * 60)
++    print("SIGNAL ANALYSIS INSIGHTS")
++    print("=" * 60)
++    print(insight_report)
++    print("=" * 60)
++
++    markdown_content = build_markdown_content(
++        mean_ic=metrics["mean_ic"],
++        icir=metrics["icir"],
++        decay_df=decay_df,
++        ic_df=ic_df,
++        ttest_p_value=ttest_p_value,
++        vote_effect=vote_effect,
++    )
++    print(markdown_content)
++
++
++if __name__ == "__main__":
++    main()
+
+tokens used
+15,947
+已新增 [task_005_insights.py](C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_005_insights.py)。这个脚本会重新加载 `hsi_features.csv`，复用 [task_004_signal_analysis.py](C:/Coding/AI-factory-projects/quantitative-research-workflow/code/task_004_signal_analysis.py) 的 `monthly IC` 和 `signal decay` 计算口径，再动态生成 4 个维度的 Insight，并打印可直接嵌入 Notebook 的 Markdown 内容。
+
+这次补充的点有两个。第一，结论不再硬编码，`统计预测力 / 信号时效性 / 投票强度 / 信号稳定性` 都按实际数值分支生成。第二，`投票强度` 不是固定文案，而是按 `vote_imbalance` 高低分组后重新算 IC，判断高共识样本是否真的更可靠。
+
+已做的验证只有语法级检查：`python -m py_compile task_005_insights.py task_004_signal_analysis.py` 通过。当前工作目录里还没有 `hsi_features.csv`，所以我没有执行实数值运行；把该文件放到 `code/` 下后，直接运行 `python task_005_insights.py` 即可输出完整 Insight 报告和 Notebook Markdown。
