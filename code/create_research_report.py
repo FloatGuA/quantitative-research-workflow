@@ -1,3 +1,4 @@
+import argparse
 import json
 from pathlib import Path
 from textwrap import dedent
@@ -324,7 +325,7 @@ TEXTS = {
 # Cell builder
 # ---------------------------------------------------------------------------
 
-def build_cells(lang: str) -> list:
+def build_cells(lang: str, data_name: str = "HSI") -> list:
     t = {k: v[lang] for k, v in TEXTS.items()}
     cells = []
 
@@ -359,7 +360,7 @@ def build_cells(lang: str) -> list:
             md(t["intro"]),
             code(
                 """
-                DATA_FILE = Path("HSI.xlsx")
+                DATA_FILE = Path("%%DATA_NAME%%.xlsx")
                 VOTE_TOLERANCE = 1e-6
                 SUMMARY_COLUMNS = ["Open", "High", "Low", "Close", "Up votes", "Down votes"]
 
@@ -1133,6 +1134,12 @@ def build_cells(lang: str) -> list:
 
     # Reorder: sections 1-4 first, then 5-11, then EDA figures 5-7 + signal/insights/strategy
     cells = cells[:16] + cells[27:] + cells[16:27]
+
+    # Substitute data file name placeholder in code cells
+    for cell in cells:
+        if cell["cell_type"] == "code":
+            cell["source"] = cell["source"].replace("%%DATA_NAME%%", data_name)
+
     return cells
 
 
@@ -1156,13 +1163,41 @@ NOTEBOOK_META = {
     "nbformat_minor": 5,
 }
 
-outputs = {
-    "en": "research_report.ipynb",
-    "zh": "research_report_zh.ipynb",
-}
 
-for lang, filename in outputs.items():
-    notebook = {"cells": build_cells(lang), **NOTEBOOK_META}
-    output_path = Path(filename)
-    output_path.write_text(json.dumps(notebook, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(f"{filename} created successfully! ({len(notebook['cells'])} cells)")
+def auto_detect_data_name() -> str:
+    """Find the first .xlsx file in cwd and return its stem."""
+    xlsx_files = sorted(Path(".").glob("*.xlsx"))
+    if not xlsx_files:
+        raise FileNotFoundError("No .xlsx file found in current directory.")
+    if len(xlsx_files) > 1:
+        print(f"Multiple xlsx files found: {[f.name for f in xlsx_files]}, using {xlsx_files[0].name}")
+    return xlsx_files[0].stem
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Generate HSI research report notebooks.")
+    parser.add_argument(
+        "--data-name",
+        default=None,
+        help="Data file stem (e.g. 'HSI' for HSI.xlsx). Auto-detected if omitted.",
+    )
+    parser.add_argument(
+        "--output-dir",
+        default="output",
+        help="Output directory for generated notebooks (default: output/).",
+    )
+    args = parser.parse_args()
+
+    data_name = args.data_name or auto_detect_data_name()
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(exist_ok=True)
+
+    outputs = {
+        "en": output_dir / f"{data_name}_research_report.ipynb",
+        "zh": output_dir / f"{data_name}_research_report_zh.ipynb",
+    }
+
+    for lang, output_path in outputs.items():
+        notebook = {"cells": build_cells(lang, data_name=data_name), **NOTEBOOK_META}
+        output_path.write_text(json.dumps(notebook, ensure_ascii=False, indent=2), encoding="utf-8")
+        print(f"{output_path} created successfully! ({len(notebook['cells'])} cells)")

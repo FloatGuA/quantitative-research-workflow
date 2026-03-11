@@ -16,19 +16,35 @@
 pip install pandas numpy matplotlib seaborn scipy openpyxl nbformat nbconvert nbclient
 ```
 
-### 生成并执行研究报告
+### 一键生成完整报告（推荐）
+
+```bash
+cd code
+python run.py
+```
+
+`run.py` 自动完成全部步骤：检测数据文件 → 生成 Notebook → 执行 → 导出 HTML → 导出 PDF。
+所有输出写入 `code/output/`，以数据文件名为前缀命名。
+
+**可选参数：**
+
+```bash
+python run.py --data-name SPX        # 指定数据文件名（默认自动检测）
+python run.py --output-dir results   # 自定义输出目录（默认 output/）
+python run.py --skip-pdf             # 跳过 PDF 导出
+```
+
+### 分步执行
 
 ```bash
 cd code
 
-# 1. 生成 Notebook（已预先生成，通常不需要重跑）
+# 仅生成 Notebook（不执行）
 python create_research_report.py
+# 支持参数：--data-name SPX --output-dir output
 
-# 2. 执行 Notebook，生成带输出的版本
-python -m jupyter nbconvert --to notebook --execute research_report.ipynb --output research_report_executed.ipynb
-
-# 3. 用浏览器打开查看
-python -m jupyter notebook research_report_executed.ipynb
+# 用浏览器打开查看
+python -m jupyter notebook output/HSI_research_report_executed.ipynb
 ```
 
 ---
@@ -44,9 +60,18 @@ quantitative-research-workflow/
 ├── HSI.xlsx                     # [用户提供] 原始数据（放根目录或 code/ 均可）
 │
 ├── code/
-│   ├── research_report.ipynb        # ★ 主输出：完整研究报告 Notebook
-│   ├── research_report_executed.ipynb  # [自动生成] 含执行结果的 Notebook
+│   ├── run.py                       # ★ 一键运行脚本（推荐入口）
 │   ├── create_research_report.py    # 程序化生成 Notebook 的脚本
+│   │
+│   ├── output/                      # [自动生成] 所有输出文件
+│   │   ├── HSI_research_report.ipynb
+│   │   ├── HSI_research_report_zh.ipynb
+│   │   ├── HSI_research_report_executed.ipynb
+│   │   ├── HSI_research_report_zh_executed.ipynb
+│   │   ├── HSI_research_report.html
+│   │   ├── HSI_research_report_zh.html
+│   │   ├── HSI_research_report.pdf
+│   │   └── HSI_research_report_zh.pdf
 │   │
 │   ├── task_001_data_loading.py     # 数据加载与清洗
 │   ├── task_002_feature_engineering.py  # 收益率 + 情绪特征
@@ -187,4 +212,4 @@ python task_008_robustness.py
 | `matplotlib` + `seaborn` | 可视化 |
 | `scipy.stats` | Spearman 相关、t-test |
 | `openpyxl` | 读取 xlsx |
-| `nbformat` + `nbconvert` | 程序化生成 / 执行 Notebook |
+| `nbformat` + `nbconvert` + `nbclient` | 程序化生成 / 执行 Notebook |

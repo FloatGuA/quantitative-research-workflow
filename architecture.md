@@ -10,9 +10,19 @@
 
 ```
 code/
-├── research_report.ipynb      # 主输出：完整研究报告 Notebook
-├── HSI.xlsx                   # 输入数据（需用户提供，放于 code/ 目录）
-└── requirements.txt           # Python 依赖列表
+├── run.py                          # 一键运行脚本（推荐入口）
+├── create_research_report.py       # Notebook 生成脚本（支持 --data-name / --output-dir）
+├── {DataName}.xlsx                 # 输入数据（用户提供，放于 code/ 目录）
+│
+└── output/                         # 所有输出（以数据文件名为前缀）
+    ├── {DataName}_research_report.ipynb
+    ├── {DataName}_research_report_zh.ipynb
+    ├── {DataName}_research_report_executed.ipynb
+    ├── {DataName}_research_report_zh_executed.ipynb
+    ├── {DataName}_research_report.html
+    ├── {DataName}_research_report_zh.html
+    ├── {DataName}_research_report.pdf
+    └── {DataName}_research_report_zh.pdf
 ```
 
 ---
@@ -50,7 +60,8 @@ HSI.xlsx
     ↓ Task 6: 策略定义
     ↓ Task 7: 回测引擎 + 绩效指标
     ↓ Task 8: 稳健性检验
-    ↓ Task 9: 整合所有章节 → research_report.ipynb
+    ↓ Task 9: 整合所有章节 → output/{DataName}_research_report.ipynb（英文 + 中文）
+    ↓ run.py: 执行 Notebook → 导出 HTML → 导出 PDF
 ```
 
 ---
