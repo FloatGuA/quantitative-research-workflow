@@ -99,7 +99,7 @@ TEXTS = {
             The dataset contains daily HSI price observations together with two sentiment-voting fields: `Up votes` and `Down votes`.
             Initial validation focuses on chronological ordering, missing-value handling, duplicate detection, and whether the sentiment shares approximately sum to one.
 
-            After forward-filling missing sentiment observations, the dataset is ready for feature engineering.
+            Rows where either `Up votes` or `Down votes` is missing are dropped to avoid introducing look-ahead bias from imputation.
             The descriptive statistics above provide a baseline view of price levels and the cross-section of sentiment inputs.
             """,
         "zh": """
@@ -108,7 +108,7 @@ TEXTS = {
             数据集包含恒生指数每日价格及两个情绪投票字段：`Up votes`（看多票数比例）和 `Down votes`（看空票数比例）。
             初步验证重点关注时间顺序、缺失值处理、重复行检测，以及情绪份额之和是否近似为 1。
 
-            对缺失情绪数据进行前向填充后，数据集可进入特征工程阶段。
+            凡 `Up votes` 或 `Down votes` 任一为空的行，直接删除，避免通过填充引入前视偏差。
             上方描述统计提供了价格水平与情绪输入截面的基准视图。
             """,
     },
@@ -280,6 +280,88 @@ TEXTS = {
             策略质量应综合收益率、Sharpe 比率、最大回撤、交易次数和手续费敏感性进行评判，而非依赖单一指标。
             """,
     },
+    "insight_dynamic": {
+        "en": (
+            'predictiveness = (\n'
+            '    "moderate"\n'
+            '    if abs(mean_ic) > 0.02 and ic_pvalue < 0.10\n'
+            '    else "weak"\n'
+            ')\n'
+            'timing_view = (\n'
+            '    "front-loaded"\n'
+            '    if abs(lag_map.get("t+1", np.nan)) >= max(abs(v) for v in lag_map.values())\n'
+            '    else "more persistent than a pure one-day signal"\n'
+            ')\n'
+            'imbalance_view = (\n'
+            '    "helps"\n'
+            '    if abs(high_ic) > abs(low_ic)\n'
+            '    else "does not clearly improve"\n'
+            ')\n\n'
+            'insight_text = f"""\n'
+            '## Signal Analysis Insights\n\n'
+            '### Key Findings\n\n'
+            "1. **Predictive power**: The signal appears **{predictiveness}**, with Mean IC = {mean_ic:.4f}, ICIR = {icir:.4f}, and t-test p-value = {ic_pvalue:.4f}.\n"
+            "2. **Decay profile**: The signal is **{timing_view}**. IC(t+1) = {lag_map.get('t+1', np.nan):.4f}, IC(t+2) = {lag_map.get('t+2', np.nan):.4f}, IC(t+3) = {lag_map.get('t+3', np.nan):.4f}.\n"
+            "3. **Consensus filter**: High vote-imbalance days {imbalance_view} signal quality. High-consensus IC = {high_ic:.4f}, low-consensus IC = {low_ic:.4f}, spread = {ic_spread:.4f}.\n"
+            "4. **Stability**: {positive_ic_pct:.1%} of monthly IC observations are positive.\n\n"
+            '### Trading Interpretation\n\n'
+            '- Use the daily sentiment score as the base signal.\n'
+            '- Emphasize short-horizon execution if the front-end IC is strongest.\n'
+            '- Consider vote imbalance as a quality filter if it improves IC magnitude.\n'
+            '"""'
+        ),
+        "zh": (
+            'predictiveness = (\n'
+            '    "中等"\n'
+            '    if abs(mean_ic) > 0.02 and ic_pvalue < 0.10\n'
+            '    else "弱"\n'
+            ')\n'
+            'timing_view = (\n'
+            '    "短期集中"\n'
+            '    if abs(lag_map.get("t+1", np.nan)) >= max(abs(v) for v in lag_map.values())\n'
+            '    else "比纯单日信号更具持续性"\n'
+            ')\n'
+            'imbalance_view = (\n'
+            '    "有助于提升"\n'
+            '    if abs(high_ic) > abs(low_ic)\n'
+            '    else "未显著改善"\n'
+            ')\n\n'
+            'insight_text = f"""\n'
+            '## 信号分析洞察\n\n'
+            '### 核心结论\n\n'
+            "1. **预测力**：信号整体表现为**{predictiveness}**，Mean IC = {mean_ic:.4f}，ICIR = {icir:.4f}，t 检验 p 值 = {ic_pvalue:.4f}。\n"
+            "2. **衰减特征**：信号呈**{timing_view}**态势。IC(t+1) = {lag_map.get('t+1', np.nan):.4f}，IC(t+2) = {lag_map.get('t+2', np.nan):.4f}，IC(t+3) = {lag_map.get('t+3', np.nan):.4f}。\n"
+            "3. **共识过滤器**：高投票分歧日{imbalance_view}信号质量。高共识 IC = {high_ic:.4f}，低共识 IC = {low_ic:.4f}，差值 = {ic_spread:.4f}。\n"
+            "4. **稳定性**：{positive_ic_pct:.1%} 的月度 IC 为正。\n\n"
+            '### 交易含义\n\n'
+            '- 以每日情绪得分作为基础信号。\n'
+            '- 若短期 IC 最强，优先考虑短线执行。\n'
+            '- 若投票分歧能提升 IC 强度，可作为质量过滤条件。\n'
+            '"""'
+        ),
+    },
+    "overfitting_md": {
+        "en": (
+            "'''\n"
+            "## Overfitting Risk Discussion\n\n"
+            "1. **In-sample only**: all analysis uses the full available sample.\n"
+            "2. **Threshold selection**: the `+/-0.1` cutoff may contain data-mining bias.\n"
+            "3. **Limited history**: the sample does not span a full set of market regimes.\n"
+            "4. **Implementation simplification**: trades assume immediate execution with no slippage.\n"
+            "5. **Recommended next step**: test on genuinely unseen forward data.\n"
+            "'''"
+        ),
+        "zh": (
+            "'''\n"
+            "## 过拟合风险讨论\n\n"
+            "1. **仅使用样本内数据**：所有分析均基于完整样本，未进行样本外验证。\n"
+            "2. **阈值选择偏差**：`+/-0.1` 阈值存在数据挖掘偏差风险。\n"
+            "3. **历史数据不足**：样本未覆盖完整的市场周期。\n"
+            "4. **执行假设简化**：回测假设以下一开盘价无滑点立即成交。\n"
+            "5. **建议后续步骤**：在真正未见过的前向数据上进行样本外测试。\n"
+            "'''"
+        ),
+    },
     "conclusion": {
         "en": """
             ## 11. Conclusion
@@ -391,8 +473,7 @@ def build_cells(lang: str, data_name: str = "HSI") -> list:
                 df_raw["vote_anomaly"] = (df_raw["vote_sum"] - 1).abs() > VOTE_TOLERANCE
                 vote_anomalies = int(df_raw["vote_anomaly"].sum())
 
-                df_raw["Up votes"] = df_raw["Up votes"].ffill()
-                df_raw["Down votes"] = df_raw["Down votes"].ffill()
+                df_raw = df_raw.dropna(subset=["Up votes", "Down votes"]).reset_index(drop=True)
 
                 summary_stats = df_raw[SUMMARY_COLUMNS].describe().T
 
@@ -821,19 +902,7 @@ def build_cells(lang: str, data_name: str = "HSI") -> list:
                 ax.legend()
                 plt.show()
 
-                display(
-                    Markdown(
-                        '''
-                ## Overfitting Risk Discussion
-
-                1. **In-sample only**: all analysis uses the full available sample.
-                2. **Threshold selection**: the `+/-0.1` cutoff may contain data-mining bias.
-                3. **Limited history**: the sample does not span a full set of market regimes.
-                4. **Implementation simplification**: trades assume immediate execution with no slippage.
-                5. **Recommended next step**: test on genuinely unseen forward data.
-                        '''
-                    )
-                )
+                display(Markdown(%%OVERFITTING_MD%%))
                 """
             ),
             md(t["evaluation"]),
@@ -1057,38 +1126,7 @@ def build_cells(lang: str, data_name: str = "HSI") -> list:
 
                 lag_map = {row["horizon"]: row["ic"] for _, row in decay_df.iterrows()}
 
-                predictiveness = (
-                    "moderate"
-                    if abs(mean_ic) > 0.02 and ic_pvalue < 0.10
-                    else "weak"
-                )
-                timing_view = (
-                    "front-loaded"
-                    if abs(lag_map.get("t+1", np.nan)) >= max(abs(v) for v in lag_map.values())
-                    else "more persistent than a pure one-day signal"
-                )
-                imbalance_view = (
-                    "helps"
-                    if abs(high_ic) > abs(low_ic)
-                    else "does not clearly improve"
-                )
-
-                insight_text = f\"\"\"
-                ## Signal Analysis Insights
-
-                ### Key Findings
-
-                1. **Predictive power**: The signal appears **{predictiveness}**, with Mean IC = {mean_ic:.4f}, ICIR = {icir:.4f}, and t-test p-value = {ic_pvalue:.4f}.
-                2. **Decay profile**: The signal is **{timing_view}**. IC(t+1) = {lag_map.get('t+1', np.nan):.4f}, IC(t+2) = {lag_map.get('t+2', np.nan):.4f}, IC(t+3) = {lag_map.get('t+3', np.nan):.4f}.
-                3. **Consensus filter**: High vote-imbalance days {imbalance_view} signal quality. High-consensus IC = {high_ic:.4f}, low-consensus IC = {low_ic:.4f}, spread = {ic_spread:.4f}.
-                4. **Stability**: {positive_ic_pct:.1%} of monthly IC observations are positive.
-
-                ### Trading Interpretation
-
-                - Use the daily sentiment score as the base signal.
-                - Emphasize short-horizon execution if the front-end IC is strongest.
-                - Consider vote imbalance as a quality filter if it improves IC magnitude.
-                \"\"\"
+                %%INSIGHT_DYNAMIC%%
 
                 display(Markdown(insight_text))
                 """
@@ -1135,10 +1173,17 @@ def build_cells(lang: str, data_name: str = "HSI") -> list:
     # Reorder: sections 1-4 first, then 5-11, then EDA figures 5-7 + signal/insights/strategy
     cells = cells[:16] + cells[27:] + cells[16:27]
 
-    # Substitute data file name placeholder in code cells
+    # Substitute placeholders in code cells
+    insight_dynamic = TEXTS["insight_dynamic"][lang]
+    overfitting_md = TEXTS["overfitting_md"][lang]
     for cell in cells:
         if cell["cell_type"] == "code":
-            cell["source"] = cell["source"].replace("%%DATA_NAME%%", data_name)
+            cell["source"] = (
+                cell["source"]
+                .replace("%%DATA_NAME%%", data_name)
+                .replace("%%INSIGHT_DYNAMIC%%", insight_dynamic)
+                .replace("%%OVERFITTING_MD%%", overfitting_md)
+            )
 
     return cells
 
