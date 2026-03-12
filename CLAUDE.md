@@ -62,7 +62,7 @@ code/
 ├── create_research_report.py    # 程序化生成 Notebook 的脚本
 ├── task_001_data_loading.py     # 数据加载与清洗（生成 hsi_clean.csv）
 ├── task_002_feature_engineering.py  # 收益率 + 情绪特征（生成 hsi_features.csv）
-├── task_003_eda.py              # EDA 可视化（7张图）
+├── task_003_eda.py              # EDA 可视化（5张图）
 ├── task_004_signal_analysis.py  # IC/ICIR/Signal Decay
 ├── task_005_insights.py         # 信号 Insight 总结（动态生成文字）
 ├── task_006_strategy_design.py  # 三种策略信号定义
@@ -71,6 +71,8 @@ code/
 ├── HSI.xlsx                     # [用户提供] 输入数据
 ├── hsi_clean.csv                # [自动生成] 清洗后数据
 └── hsi_features.csv             # [自动生成] 特征工程数据
+
+requirements.txt                 # 依赖版本锁定
 ```
 
 ---
@@ -90,6 +92,9 @@ code/
 | 007 | 回测引擎 | ✅ Done | Pass |
 | 008 | 稳健性检验 | ✅ Done | Pass with Warnings |
 | 009 | 最终报告整合 | ✅ Done | Pass with Warnings |
+| 010 | 中文版报告生成 | ✅ Done | Pass |
+| 011 | 方法论修正：信号方向反转 + 训练/测试集划分 | ✅ Done | Pass with Warnings |
+| 012 | 方法论修正 Round 2：IC/Decay 训练集限定 + qcut 去偏 + p-value 守卫 | ✅ Done | Pass |
 
 ### Must Fix（必须修复）
 当前无阻塞性问题。
@@ -100,24 +105,20 @@ code/
    `task_005_insights.py` 和 `task_008_robustness.py` 中的 `from task_00N import ...` 依赖当前目录，在 Jupyter Notebook 中直接运行时可能失败。
    **修复方案**：将依赖函数内联，或统一放到 `utils.py` 模块中。
 
-2. **Task 006 — 前视偏差风险（轻微）**：
-   Strategy C 的 `vote_imbalance` 中位数在全样本上计算，严格来说存在轻微的前视偏差。
-   **修复方案**：改用 expanding median（`df['vote_imbalance'].expanding().median()`）。
-
-3. **Task 007/008 — 指标序列化**：
-   Task 007 的 `calculate_metrics()` 返回已格式化的字符串（如 `"12.34%"`），Task 008 需要反序列化才能做数值比较。
-   **修复方案**：`calculate_metrics()` 返回原始 float 值，格式化在展示层处理。
-
-4. **Task 009 — Notebook cell 顺序硬编码**：
+2. **Task 009 — Notebook cell 顺序硬编码**：
    `create_research_report.py` 中 `cells[:16] + cells[27:] + cells[16:27]` 使用硬编码索引，cell 数量变化时会静默失效。
    **修复方案**：改用命名标记（section headers）来定位和排序 cells。
+
+3. **Task 011 — OOS 起始仓位不干净**：
+   `rebase_portfolio` 切片后不处理起始仓位，OOS 第一笔收益可能来自 IS 末尾续仓。
+   **修复方案**：对 OOS 第一行 `strategy_return` 归零后再 rebase。
 
 ---
 
 ## 下一步迭代建议
 
-1. **优先**：修复 Should Fix 第 1 项（task_005/008 导入问题），使 Notebook 可以无依赖运行
-2. **优先**：验证 `research_report.ipynb` 端到端可执行（`jupyter nbconvert --execute`）
+1. **优先**：修复 Should Fix 第 1 项（task_005/008 导入问题），使独立模块可以无耦合运行
+2. **优先**：修复 OOS 起始仓位（Should Fix 第 3 项），使 IS/OOS 绩效对比更准确
 3. **中期**：添加 `requirements.txt`，锁定依赖版本
 4. **中期**：添加数据缺失时的友好错误提示（`HSI.xlsx` 不存在时报清晰错误）
 5. **可选**：将重复使用的函数（回测引擎、绩效指标）抽取到 `utils.py`

@@ -62,23 +62,7 @@ def save_and_close(fig: plt.Figure, output_path: str) -> None:
 
 
 def run_backtest(df: pd.DataFrame, signals: pd.Series, fee_rate: float = 0.0) -> pd.DataFrame:
-    """
-    矢量化回测引擎
-
-    Parameters
-    ----------
-    df : DataFrame
-        Must include Date and return_open columns.
-    signals : Series
-        Values in {1, -1, 0}.
-    fee_rate : float
-        Single-side fee rate.
-
-    Returns
-    -------
-    DataFrame
-        Portfolio path with daily return, cumulative return, fee, and drawdown.
-    """
+    """Vectorized backtest engine."""
     portfolio = df[["Date", "return_open"]].copy()
     portfolio["signal"] = pd.Series(signals, index=df.index).fillna(0).astype("int64")
     portfolio["strategy_return"] = portfolio["signal"] * portfolio["return_open"].fillna(0.0)
@@ -140,7 +124,7 @@ def calculate_metrics(portfolio: pd.DataFrame, annual_factor: int = ANNUAL_FACTO
 
 
 def benchmark_buyhold(df: pd.DataFrame) -> pd.DataFrame:
-    """买入持有基准：close-to-close return."""
+    """Buy-and-hold benchmark using close-to-close returns."""
     bm = df[["Date", "return_close"]].copy()
     bm["return_close"] = bm["return_close"].fillna(0.0)
     bm["cum_return"] = (1 + bm["return_close"]).cumprod() - 1
@@ -149,16 +133,23 @@ def benchmark_buyhold(df: pd.DataFrame) -> pd.DataFrame:
     return bm
 
 
-def print_metrics_table(results: dict[str, dict[str, object]]) -> pd.DataFrame:
+def print_metrics_table(results: dict[str, dict[str, object]], title: str = "BACKTEST PERFORMANCE COMPARISON") -> pd.DataFrame:
     """Print a comparison table for all strategy backtests."""
-    metrics_table = pd.DataFrame(
-        {name: result["metrics"] for name, result in results.items()}
-    ).T
+    metrics_table = pd.DataFrame({name: result["metrics"] for name, result in results.items()}).T
     print("\n" + "=" * 90)
-    print("BACKTEST PERFORMANCE COMPARISON")
+    print(title)
     print("=" * 90)
     print(metrics_table.to_string())
     return metrics_table
+
+
+def _rebase_portfolio(portfolio: pd.DataFrame) -> pd.DataFrame:
+    """Recompute path-dependent fields after slicing a portfolio into a subperiod."""
+    rebased = portfolio.copy()
+    cum_value = (1 + rebased["strategy_return"].fillna(0.0)).cumprod()
+    rebased["cum_return"] = cum_value - 1
+    rebased["drawdown"] = (cum_value - cum_value.cummax()) / cum_value.cummax()
+    return rebased
 
 
 def run_all_backtests(df: pd.DataFrame) -> dict[str, dict[str, object]]:
@@ -179,6 +170,28 @@ def run_all_backtests(df: pd.DataFrame) -> dict[str, dict[str, object]]:
 
     print_metrics_table(results)
     return results
+
+
+def split_and_report(df: pd.DataFrame, results: dict[str, dict[str, object]]) -> None:
+    """Print separate in-sample and out-of-sample performance tables when available."""
+    if "is_train" not in df.columns:
+        return
+
+    test_rows = df.loc[~df["is_train"], "Date"]
+    if test_rows.empty:
+        return
+
+    split_date = test_rows.iloc[0]
+    print(f"\nTrain/Test split date: {split_date.date()}")
+
+    for period, mask in [("In-Sample (Train)", df["is_train"]), ("Out-of-Sample (Test)", ~df["is_train"])]:
+        idx = df.index[mask]
+        period_results: dict[str, dict[str, object]] = {}
+        for key, val in results.items():
+            period_portfolio = val["portfolio"].loc[val["portfolio"].index.isin(idx)].copy()
+            period_portfolio = _rebase_portfolio(period_portfolio)
+            period_results[key] = {"metrics": calculate_metrics(period_portfolio)}
+        print_metrics_table(period_results, title=period)
 
 
 def plot_cumulative_returns(df: pd.DataFrame, results: dict[str, dict[str, object]]) -> None:
@@ -291,6 +304,7 @@ def main() -> None:
     df = ensure_signals(df)
 
     results = run_all_backtests(df)
+    split_and_report(df, results)
     plot_cumulative_returns(df, results)
     plot_drawdown(results)
     plot_monthly_heatmap(results["Strategy_A_no_fee"]["portfolio"])

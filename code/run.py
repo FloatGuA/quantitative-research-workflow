@@ -13,12 +13,10 @@ Usage:
 """
 
 import argparse
+import os
 import subprocess
 import sys
 from pathlib import Path
-
-import nbformat
-from nbclient import NotebookClient
 
 
 def run(cmd, **kwargs):
@@ -47,6 +45,13 @@ def main():
 
     data_name = find_data_name(args.data_name)
     output_dir = Path(args.output_dir)
+    runtime_dir = output_dir / ".jupyter_runtime"
+    runtime_dir.mkdir(parents=True, exist_ok=True)
+    os.environ["JUPYTER_RUNTIME_DIR"] = str(runtime_dir.resolve())
+    os.environ.setdefault("JUPYTER_ALLOW_INSECURE_WRITES", "true")
+
+    import nbformat
+    from nbclient import NotebookClient
 
     print(f"=== Building report for: {data_name}.xlsx ===")
     print(f"=== Output directory: {output_dir}/ ===\n")

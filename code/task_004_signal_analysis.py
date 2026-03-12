@@ -50,7 +50,7 @@ def save_and_show(fig: plt.Figure, output_path: str) -> None:
 
 
 def compute_monthly_ic(df: pd.DataFrame) -> pd.DataFrame:
-    working = df.copy()
+    working = df.loc[df["is_train"]].copy() if "is_train" in df.columns else df.copy()
     working["year_month"] = working["Date"].dt.to_period("M")
     monthly_ic = []
 
@@ -135,13 +135,14 @@ def run_ic_ttest(ic_df: pd.DataFrame) -> tuple[float, float]:
 
 
 def compute_signal_decay(df: pd.DataFrame) -> pd.DataFrame:
+    working = df.loc[df["is_train"]].copy() if "is_train" in df.columns else df.copy()
     decay_results = []
 
     for lag in DECAY_HORIZONS:
-        future_return = df["return_open"].shift(-lag)
+        future_return = working["return_open"].shift(-lag)
         clean = pd.DataFrame(
             {
-                "signal": df["sentiment_score"],
+                "signal": working["sentiment_score"],
                 "future_return": future_return,
             }
         ).dropna()

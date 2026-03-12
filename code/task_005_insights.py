@@ -25,15 +25,17 @@ def compute_vote_imbalance_effect(df: pd.DataFrame) -> dict[str, float]:
         missing_str = ", ".join(sorted(missing_columns))
         raise ValueError(f"Missing required columns for vote imbalance analysis: {missing_str}")
 
-    high_cutoff = df["vote_imbalance"].quantile(HIGH_IMBALANCE_QUANTILE)
-    low_cutoff = df["vote_imbalance"].quantile(LOW_IMBALANCE_QUANTILE)
+    train_df = df.loc[df["is_train"]] if "is_train" in df.columns else df
 
-    high_sample = df.loc[
-        df["vote_imbalance"] >= high_cutoff,
+    high_cutoff = train_df["vote_imbalance"].quantile(HIGH_IMBALANCE_QUANTILE)
+    low_cutoff = train_df["vote_imbalance"].quantile(LOW_IMBALANCE_QUANTILE)
+
+    high_sample = train_df.loc[
+        train_df["vote_imbalance"] >= high_cutoff,
         ["sentiment_score", "return_open"],
     ].dropna()
-    low_sample = df.loc[
-        df["vote_imbalance"] <= low_cutoff,
+    low_sample = train_df.loc[
+        train_df["vote_imbalance"] <= low_cutoff,
         ["sentiment_score", "return_open"],
     ].dropna()
 
@@ -71,9 +73,27 @@ def generate_insights(
     insights: list[str] = []
 
     if abs(mean_ic) > 0.05 and not pd.isna(icir) and abs(icir) > 0.5 and ttest_p_value < 0.05:
-        pred_conclusion = "情绪信号对次日收益具有统计显著的预测力，且 IC 显著异于 0。"
+        if mean_ic < 0:
+            pred_conclusion = (
+                "情绪信号对次日收益具有统计显著的反向预测力（IC < 0，为反向指标）。"
+                "统计显著仅表示关系存在，不代表原始做多正情绪方向正确；策略应反向使用。"
+            )
+        else:
+            pred_conclusion = (
+                "情绪信号对次日收益具有统计显著的预测力。"
+                "统计显著表示关系存在，仍需单独确认交易方向是否与 IC 一致。"
+            )
     elif abs(mean_ic) > 0.02 and ttest_p_value < 0.10:
-        pred_conclusion = "情绪信号对次日收益具有偏弱但可识别的预测力。"
+        if mean_ic < 0:
+            pred_conclusion = (
+                "情绪信号对次日收益具有偏弱但可识别的反向预测力（IC < 0，为反向指标）。"
+                "统计显著性不能替代方向判断，原始信号应取反。"
+            )
+        else:
+            pred_conclusion = (
+                "情绪信号对次日收益具有偏弱但可识别的预测力。"
+                "统计显著性不能替代方向判断，仍需验证交易方向设置。"
+            )
     else:
         pred_conclusion = "情绪信号对次日收益的预测力不显著，统计证据不足。"
 
@@ -84,16 +104,21 @@ def generate_insights(
         f"t-test p-value = {_format_float(ttest_p_value)}"
     )
 
-    lag_map = {
-        row["horizon"]: row["ic"]
-        for _, row in decay_df.iterrows()
-    }
+    lag_map = {row["horizon"]: row["ic"] for _, row in decay_df.iterrows()}
     lag1_ic = lag_map.get("t+1", np.nan)
     lag2_ic = lag_map.get("t+2", np.nan)
     lag3_ic = lag_map.get("t+3", np.nan)
     lag_abs = pd.Series({"t+1": abs(lag1_ic), "t+2": abs(lag2_ic), "t+3": abs(lag3_ic)}).dropna()
 
-    if not lag_abs.empty and lag_abs.idxmax() == "t+1" and lag_abs.loc["t+1"] > 0:
+    all_decay_insignificant = all(
+        row["p_value"] > 0.05
+        for _, row in decay_df.iterrows()
+        if not pd.isna(row["p_value"])
+    )
+
+    if all_decay_insignificant:
+        decay_conclusion = "信号在各测试期均不显著，时效性结论不可靠。"
+    elif not lag_abs.empty and lag_abs.idxmax() == "t+1" and lag_abs.loc["t+1"] > 0:
         decay_conclusion = "信号以短期为主，t+1 的预测力最强，alpha 更可能在 1 至 2 天内衰减。"
     elif not lag_abs.empty and lag_abs.idxmax() in {"t+2", "t+3"}:
         decay_conclusion = "信号并非只在次日生效，较长持有期仍保留部分预测力。"
@@ -127,7 +152,13 @@ def generate_insights(
     )
 
     positive_ic_pct = (ic_df["ic"] > 0).mean()
-    if positive_ic_pct >= 0.6 and mean_ic > 0:
+    if mean_ic < 0:
+        negative_ic_pct = (ic_df["ic"] < 0).mean()
+        stability = (
+            f"信号在 {negative_ic_pct:.0%} 的月份中保持负 IC，方向上更接近稳定的反向指标；"
+            f"仅有 {positive_ic_pct:.0%} 的月份为正。"
+        )
+    elif positive_ic_pct >= 0.6 and mean_ic > 0:
         stability = f"信号在 {positive_ic_pct:.0%} 的月份中保持正向 IC，稳定性较强。"
     elif positive_ic_pct >= 0.5:
         stability = f"信号在 {positive_ic_pct:.0%} 的月份中为正，具备一定稳定性但一致性一般。"
@@ -152,10 +183,18 @@ def generate_english_summary(
 ) -> str:
     lag_map = {row["horizon"]: row["ic"] for _, row in decay_df.iterrows()}
     positive_ic_pct = (ic_df["ic"] > 0).mean()
-    return "\n".join(
+
+    lines = [
+        "- **Predictiveness**: "
+        f"Mean IC = {_format_float(mean_ic)} and ICIR = {_format_float(icir)} summarize the signal's base efficacy.",
+    ]
+    if mean_ic < 0:
+        lines.append(
+            "- **Signal Direction**: IC < 0 — this is a contrarian signal. "
+            "Positive sentiment predicts negative returns. Strategies should short on high sentiment and go long on low sentiment."
+        )
+    lines.extend(
         [
-            "- **Predictiveness**: "
-            f"Mean IC = {_format_float(mean_ic)} and ICIR = {_format_float(icir)} summarize the signal's base efficacy.",
             "- **Decay**: "
             f"IC(t+1) = {_format_float(lag_map.get('t+1', np.nan))}, "
             f"IC(t+2) = {_format_float(lag_map.get('t+2', np.nan))}, "
@@ -167,6 +206,7 @@ def generate_english_summary(
             f"{positive_ic_pct:.0%} of monthly IC observations are positive.",
         ]
     )
+    return "\n".join(lines)
 
 
 def build_markdown_content(
@@ -194,6 +234,11 @@ def build_markdown_content(
     )
 
     lag_map = {row["horizon"]: row["ic"] for _, row in decay_df.iterrows()}
+    trading_note = (
+        "- **Direction**: IC < 0 implies a contrarian mapping; high sentiment should be shorted and low sentiment should be bought.\n"
+        if mean_ic < 0
+        else ""
+    )
     return f"""
 ## 6. Signal Analysis Insights
 
@@ -205,7 +250,7 @@ def build_markdown_content(
 
 Based on the signal analysis:
 - **Entry**: Use daily sentiment score as the primary signal.
-- **Signal Quality**: ICIR = {_format_float(icir)}.
+{trading_note}- **Signal Quality**: ICIR = {_format_float(icir)}.
 - **Decay**: IC(t+1) = {_format_float(lag_map.get("t+1", np.nan))}, suggesting focus on short-horizon positioning when the front-end IC is strongest.
 - **Filter**: Use `vote_imbalance` as a quality filter when high-consensus days show stronger IC.
 

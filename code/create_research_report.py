@@ -123,7 +123,6 @@ TEXTS = {
             - `return_open`: next-day open-to-open return, aligned with a signal known after day `t`.
             - `extreme_bull` and `extreme_bear`: tail-state indicators for sentiment extremes.
             - `sentiment_lag1` to `sentiment_lag3`: delayed signals for decay analysis.
-            - `sentiment_quantile`: five sentiment buckets for monotonicity checks.
             """,
         "zh": """
             ## 3. 特征工程
@@ -135,7 +134,6 @@ TEXTS = {
             - `return_open`：次日开盘对开盘收益率，与 t 日已知信号对齐。
             - `extreme_bull` 和 `extreme_bear`：情绪极值的尾部状态标记。
             - `sentiment_lag1` 至 `sentiment_lag3`：滞后信号，用于衰减分析。
-            - `sentiment_quantile`：五分位情绪分组，用于单调性检验。
             """,
     },
     "fig1": {
@@ -163,16 +161,8 @@ TEXTS = {
         "zh": "**图 4.** 情绪得分与次日收益率的散点图及线性趋势拟合。",
     },
     "fig5": {
-        "en": "**Figure 5.** Average next-day return by sentiment quantile to test monotonicity.",
-        "zh": "**图 5.** 各情绪分位组的次日平均收益率，用于检验单调性。",
-    },
-    "fig6": {
-        "en": "**Figure 6.** Expanding average return by sentiment bucket to show persistence through time.",
-        "zh": "**图 6.** 各情绪分组的滚动扩展平均收益率，展示信号的时间持续性。",
-    },
-    "fig7": {
-        "en": "**Figure 7.** Spearman correlation heatmap across returns, sentiment, and lagged sentiment features.",
-        "zh": "**图 7.** 收益率、情绪及滞后情绪特征之间的 Spearman 相关系数热力图。",
+        "en": "**Figure 5.** Spearman correlation heatmap across returns, sentiment, and lagged sentiment features.",
+        "zh": "**图 5.** 收益率、情绪及滞后情绪特征之间的 Spearman 相关系数热力图。",
     },
     "signal_analysis": {
         "en": """
@@ -217,7 +207,7 @@ TEXTS = {
               Go long when sentiment is above `+0.1`, short when below `-0.1`, and stay flat otherwise.
 
             - **Strategy C: Threshold + Conviction Filter**
-              Apply Strategy B only when `vote_imbalance` is at or above the sample median.
+              Apply Strategy B only when `vote_imbalance` is at or above the train-sample median.
 
             All signals are formed using information available on day `t` and are mapped to next-day returns through the pre-aligned `return_open` series.
             """,
@@ -233,7 +223,7 @@ TEXTS = {
               情绪得分高于 `+0.1` 时做多，低于 `-0.1` 时做空，否则空仓。
 
             - **策略 C：阈值 + 强度过滤**
-              仅在 `vote_imbalance` 不低于样本中位数时执行策略 B 的信号。
+              仅在 `vote_imbalance` 不低于训练集样本中位数时执行策略 B 的信号。
 
             所有信号均基于 t 日已知信息构建，并通过预对齐的 `return_open` 序列映射至次日收益。
             """,
@@ -287,10 +277,24 @@ TEXTS = {
             '    if abs(mean_ic) > 0.02 and ic_pvalue < 0.10\n'
             '    else "weak"\n'
             ')\n'
+            'direction_note = (\n'
+            '    "Note: IC < 0 — this is a **contrarian** signal. "\n'
+            '    "Positive sentiment predicts negative returns; strategies should be inverted.\\n"\n'
+            '    if mean_ic < 0 else ""\n'
+            ')\n'
+            'all_decay_insignificant = all(\n'
+            '    row["p_value"] > 0.05\n'
+            '    for _, row in decay_df.iterrows()\n'
+            '    if not pd.isna(row["p_value"])\n'
+            ')\n'
             'timing_view = (\n'
-            '    "front-loaded"\n'
-            '    if abs(lag_map.get("t+1", np.nan)) >= max(abs(v) for v in lag_map.values())\n'
-            '    else "more persistent than a pure one-day signal"\n'
+            '    "not statistically significant at any tested horizon"\n'
+            '    if all_decay_insignificant\n'
+            '    else (\n'
+            '        "front-loaded"\n'
+            '        if abs(lag_map.get("t+1", np.nan)) >= max(abs(v) for v in lag_map.values())\n'
+            '        else "more persistent than a pure one-day signal"\n'
+            '    )\n'
             ')\n'
             'imbalance_view = (\n'
             '    "helps"\n'
@@ -301,11 +305,13 @@ TEXTS = {
             '## Signal Analysis Insights\n\n'
             '### Key Findings\n\n'
             "1. **Predictive power**: The signal appears **{predictiveness}**, with Mean IC = {mean_ic:.4f}, ICIR = {icir:.4f}, and t-test p-value = {ic_pvalue:.4f}.\n"
+            '{direction_note}'
             "2. **Decay profile**: The signal is **{timing_view}**. IC(t+1) = {lag_map.get('t+1', np.nan):.4f}, IC(t+2) = {lag_map.get('t+2', np.nan):.4f}, IC(t+3) = {lag_map.get('t+3', np.nan):.4f}.\n"
             "3. **Consensus filter**: High vote-imbalance days {imbalance_view} signal quality. High-consensus IC = {high_ic:.4f}, low-consensus IC = {low_ic:.4f}, spread = {ic_spread:.4f}.\n"
             "4. **Stability**: {positive_ic_pct:.1%} of monthly IC observations are positive.\n\n"
             '### Trading Interpretation\n\n'
             '- Use the daily sentiment score as the base signal.\n'
+            '- Statistical significance indicates a relationship exists; it does not by itself validate the original trade direction.\n'
             '- Emphasize short-horizon execution if the front-end IC is strongest.\n'
             '- Consider vote imbalance as a quality filter if it improves IC magnitude.\n'
             '"""'
@@ -316,10 +322,24 @@ TEXTS = {
             '    if abs(mean_ic) > 0.02 and ic_pvalue < 0.10\n'
             '    else "弱"\n'
             ')\n'
+            'direction_note = (\n'
+            '    "提示：IC < 0，说明这是一个**反向**信号。"\n'
+            '    "正情绪预测负收益，策略方向应取反。\\n"\n'
+            '    if mean_ic < 0 else ""\n'
+            ')\n'
+            'all_decay_insignificant = all(\n'
+            '    row["p_value"] > 0.05\n'
+            '    for _, row in decay_df.iterrows()\n'
+            '    if not pd.isna(row["p_value"])\n'
+            ')\n'
             'timing_view = (\n'
-            '    "短期集中"\n'
-            '    if abs(lag_map.get("t+1", np.nan)) >= max(abs(v) for v in lag_map.values())\n'
-            '    else "比纯单日信号更具持续性"\n'
+            '    "任意测试期均不显著"\n'
+            '    if all_decay_insignificant\n'
+            '    else (\n'
+            '        "短期集中"\n'
+            '        if abs(lag_map.get("t+1", np.nan)) >= max(abs(v) for v in lag_map.values())\n'
+            '        else "比纯单日信号更具持续性"\n'
+            '    )\n'
             ')\n'
             'imbalance_view = (\n'
             '    "有助于提升"\n'
@@ -330,11 +350,13 @@ TEXTS = {
             '## 信号分析洞察\n\n'
             '### 核心结论\n\n'
             "1. **预测力**：信号整体表现为**{predictiveness}**，Mean IC = {mean_ic:.4f}，ICIR = {icir:.4f}，t 检验 p 值 = {ic_pvalue:.4f}。\n"
+            '{direction_note}'
             "2. **衰减特征**：信号呈**{timing_view}**态势。IC(t+1) = {lag_map.get('t+1', np.nan):.4f}，IC(t+2) = {lag_map.get('t+2', np.nan):.4f}，IC(t+3) = {lag_map.get('t+3', np.nan):.4f}。\n"
             "3. **共识过滤器**：高投票分歧日{imbalance_view}信号质量。高共识 IC = {high_ic:.4f}，低共识 IC = {low_ic:.4f}，差值 = {ic_spread:.4f}。\n"
             "4. **稳定性**：{positive_ic_pct:.1%} 的月度 IC 为正。\n\n"
             '### 交易含义\n\n'
             '- 以每日情绪得分作为基础信号。\n'
+            '- 统计显著仅说明存在关系，并不自动代表原始交易方向正确。\n'
             '- 若短期 IC 最强，优先考虑短线执行。\n'
             '- 若投票分歧能提升 IC 强度，可作为质量过滤条件。\n'
             '"""'
@@ -344,21 +366,21 @@ TEXTS = {
         "en": (
             "'''\n"
             "## Overfitting Risk Discussion\n\n"
-            "1. **In-sample only**: all analysis uses the full available sample.\n"
+            "1. **Single split validation**: parameters are fit on the first 80% of observations and checked on the final 20%, but this is still only one time split.\n"
             "2. **Threshold selection**: the `+/-0.1` cutoff may contain data-mining bias.\n"
             "3. **Limited history**: the sample does not span a full set of market regimes.\n"
             "4. **Implementation simplification**: trades assume immediate execution with no slippage.\n"
-            "5. **Recommended next step**: test on genuinely unseen forward data.\n"
+            "5. **Recommended next step**: extend to rolling or expanding walk-forward validation on newer unseen data.\n"
             "'''"
         ),
         "zh": (
             "'''\n"
             "## 过拟合风险讨论\n\n"
-            "1. **仅使用样本内数据**：所有分析均基于完整样本，未进行样本外验证。\n"
+            "1. **单次切分验证**：参数仅在前 80% 训练集上拟合，并在后 20% 测试集上验证，但这仍只是一次时序切分。\n"
             "2. **阈值选择偏差**：`+/-0.1` 阈值存在数据挖掘偏差风险。\n"
             "3. **历史数据不足**：样本未覆盖完整的市场周期。\n"
             "4. **执行假设简化**：回测假设以下一开盘价无滑点立即成交。\n"
-            "5. **建议后续步骤**：在真正未见过的前向数据上进行样本外测试。\n"
+            "5. **建议后续步骤**：在更新数据上继续做滚动或扩展窗口的 walk-forward 样本外测试。\n"
             "'''"
         ),
     },
@@ -373,7 +395,7 @@ TEXTS = {
 
             ### Limitations
             1. Short history, not tested across a full market cycle.
-            2. No formal out-of-sample validation.
+            2. Validation is based on a single 80/20 time split rather than a full walk-forward design.
             3. Assumes immediate execution at the next open with no slippage.
 
             ### Next Steps
@@ -391,7 +413,7 @@ TEXTS = {
 
             ### 局限性
             1. 历史数据较短，未覆盖完整的市场周期。
-            2. 未进行正式的样本外验证。
+            2. 当前验证仅基于单次 80/20 时序切分，而非完整的 walk-forward 设计。
             3. 假设在次日开盘立即以无滑点价格执行。
 
             ### 后续方向
@@ -497,21 +519,19 @@ def build_cells(lang: str, data_name: str = "HSI") -> list:
                 df["sentiment_score"] = df["Up votes"] - df["Down votes"]
                 df["vote_imbalance"] = df["sentiment_score"].abs()
 
-                q80 = df["sentiment_score"].quantile(0.8)
-                q20 = df["sentiment_score"].quantile(0.2)
+                TRAIN_RATIO = 0.8
+                split_n = int(len(df) * TRAIN_RATIO)
+                q80 = df["sentiment_score"].iloc[:split_n].quantile(0.8)
+                q20 = df["sentiment_score"].iloc[:split_n].quantile(0.2)
+                df["is_train"] = False
+                if split_n > 0:
+                    df.loc[: split_n - 1, "is_train"] = True
                 df["extreme_bull"] = df["sentiment_score"] >= q80
                 df["extreme_bear"] = df["sentiment_score"] <= q20
 
                 df["sentiment_lag1"] = df["sentiment_score"].shift(1)
                 df["sentiment_lag2"] = df["sentiment_score"].shift(2)
                 df["sentiment_lag3"] = df["sentiment_score"].shift(3)
-
-                ranked_sentiment = df["sentiment_score"].rank(method="first")
-                df["sentiment_quantile"] = pd.qcut(
-                    ranked_sentiment,
-                    q=5,
-                    labels=["Q1", "Q2", "Q3", "Q4", "Q5"],
-                )
 
                 feature_summary = df[
                     ["sentiment_score", "vote_imbalance", "return_open", "return_close"]
@@ -539,9 +559,7 @@ def build_cells(lang: str, data_name: str = "HSI") -> list:
                     }
                 )
 
-                quantile_dist = df["sentiment_quantile"].value_counts(sort=False, dropna=False)
                 display(diagnostics)
-                display(quantile_dist.to_frame("count"))
                 """
             ),
             md(t["fig1"]),
@@ -659,6 +677,37 @@ def build_cells(lang: str, data_name: str = "HSI") -> list:
                     benchmark["drawdown"] = (cum_value - cum_value.cummax()) / cum_value.cummax()
                     return benchmark
 
+                def rebase_portfolio(portfolio):
+                    rebased = portfolio.copy()
+                    cum_value = (1 + rebased["strategy_return"].fillna(0.0)).cumprod()
+                    rebased["cum_return"] = cum_value - 1
+                    rebased["drawdown"] = (cum_value - cum_value.cummax()) / cum_value.cummax()
+                    return rebased
+
+                def split_metrics(frame, results):
+                    if "is_train" not in frame.columns:
+                        return pd.DataFrame()
+                    records = []
+                    for period_name, mask in [
+                        ("In-Sample (Train)", frame["is_train"]),
+                        ("Out-of-Sample (Test)", ~frame["is_train"]),
+                    ]:
+                        period_index = frame.index[mask]
+                        for strategy_name, result in results.items():
+                            period_portfolio = result["portfolio"].loc[
+                                result["portfolio"].index.isin(period_index)
+                            ].copy()
+                            period_portfolio = rebase_portfolio(period_portfolio)
+                            metrics = calculate_metrics(period_portfolio)
+                            records.append(
+                                {
+                                    "Period": period_name,
+                                    "Strategy": strategy_name,
+                                    **metrics,
+                                }
+                            )
+                    return pd.DataFrame(records)
+
                 strategy_map = {
                     "Strategy_A": df["signal_a"],
                     "Strategy_B": df["signal_b"],
@@ -692,6 +741,24 @@ def build_cells(lang: str, data_name: str = "HSI") -> list:
                         }
                     )
                 )
+
+                split_metrics_table = split_metrics(df, backtest_results)
+                if not split_metrics_table.empty:
+                    split_date = df.loc[~df["is_train"], "Date"].iloc[0]
+                    display(Markdown(f"**Train/Test split date:** {split_date.date()}"))
+                    display(
+                        split_metrics_table.style.format(
+                            {
+                                "Total Return": "{:.2%}",
+                                "Annual Return": "{:.2%}",
+                                "Annual Volatility": "{:.2%}",
+                                "Sharpe Ratio": "{:.3f}",
+                                "Max Drawdown": "{:.2%}",
+                                "Win Rate": "{:.2%}",
+                                "Total Fee Cost": "{:.4f}",
+                            }
+                        )
+                    )
                 """
             ),
             md(t["backtest"]),
@@ -785,8 +852,8 @@ def build_cells(lang: str, data_name: str = "HSI") -> list:
                 def threshold_sensitivity_analysis(frame):
                     records = []
                     for threshold in [0.0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3]:
-                        signals = (frame["sentiment_score"] > threshold).astype(int) - (
-                            frame["sentiment_score"] < -threshold
+                        signals = (frame["sentiment_score"] < -threshold).astype(int) - (
+                            frame["sentiment_score"] > threshold
                         ).astype(int)
                         portfolio = run_backtest(frame, signals, fee_rate=FEE_RATE)
                         metrics = calculate_metrics(portfolio)
@@ -804,7 +871,7 @@ def build_cells(lang: str, data_name: str = "HSI") -> list:
                     records = []
                     for lag in [0, 1, 2, 3]:
                         score = frame["sentiment_score"] if lag == 0 else frame[f"sentiment_lag{lag}"]
-                        signals = (score > 0.1).astype(int) - (score < -0.1).astype(int)
+                        signals = (score < -0.1).astype(int) - (score > 0.1).astype(int)
                         portfolio = run_backtest(frame, signals, fee_rate=FEE_RATE)
                         metrics = calculate_metrics(portfolio)
                         records.append(
@@ -824,11 +891,11 @@ def build_cells(lang: str, data_name: str = "HSI") -> list:
                         limits=[0.01, 0.01],
                     )
 
-                    original_signals = (frame["sentiment_score"] > 0.1).astype(int) - (
-                        frame["sentiment_score"] < -0.1
+                    original_signals = (frame["sentiment_score"] < -0.1).astype(int) - (
+                        frame["sentiment_score"] > 0.1
                     ).astype(int)
-                    winsorized_signals = (winsorized["sentiment_winsorized"] > 0.1).astype(int) - (
-                        winsorized["sentiment_winsorized"] < -0.1
+                    winsorized_signals = (winsorized["sentiment_winsorized"] < -0.1).astype(int) - (
+                        winsorized["sentiment_winsorized"] > 0.1
                     ).astype(int)
 
                     original_portfolio = run_backtest(frame, original_signals, fee_rate=FEE_RATE)
@@ -957,52 +1024,6 @@ def build_cells(lang: str, data_name: str = "HSI") -> list:
             md(t["fig5"]),
             code(
                 """
-                quantile_returns = (
-                    df.groupby("sentiment_quantile", observed=False)["return_open"]
-                    .mean()
-                    .reindex(["Q1", "Q2", "Q3", "Q4", "Q5"])
-                )
-
-                fig, ax = plt.subplots(figsize=(8, 5))
-                quantile_returns.plot(
-                    kind="bar",
-                    ax=ax,
-                    color=["#d73027", "#fc8d59", "#fee090", "#91bfdb", "#4575b4"],
-                )
-                ax.axhline(0, color="black", linestyle="--", alpha=0.6)
-                ax.set_title("Average Next-Day Return by Sentiment Quantile")
-                ax.set_xlabel("Sentiment Quantile")
-                ax.set_ylabel("Mean Return")
-                ax.tick_params(axis="x", rotation=0)
-                plt.show()
-                """
-            ),
-            md(t["fig6"]),
-            code(
-                """
-                fig, ax = plt.subplots(figsize=(14, 6))
-                colors = ["#d73027", "#fc8d59", "#fee090", "#91bfdb", "#4575b4"]
-                for quantile, color in zip(["Q1", "Q2", "Q3", "Q4", "Q5"], colors):
-                    subset = df.loc[df["sentiment_quantile"] == quantile, ["Date", "return_open"]].dropna()
-                    if subset.empty:
-                        continue
-                    ax.plot(
-                        subset["Date"].values,
-                        subset["return_open"].expanding().mean().values,
-                        label=quantile,
-                        color=color,
-                        linewidth=2,
-                    )
-                ax.set_title("Expanding Average Return by Sentiment Quantile")
-                ax.set_xlabel("Date")
-                ax.set_ylabel("Expanding Mean Return")
-                ax.legend()
-                plt.show()
-                """
-            ),
-            md(t["fig7"]),
-            code(
-                """
                 corr_cols = [
                     "sentiment_score",
                     "vote_imbalance",
@@ -1025,7 +1046,8 @@ def build_cells(lang: str, data_name: str = "HSI") -> list:
                 """
                 MIN_MONTHLY_OBSERVATIONS = 5
 
-                working = df.copy()
+                train_df = df.loc[df["is_train"]] if "is_train" in df.columns else df
+                working = train_df.copy()
                 working["year_month"] = working["Date"].dt.to_period("M")
                 monthly_ic_records = []
 
@@ -1076,11 +1098,12 @@ def build_cells(lang: str, data_name: str = "HSI") -> list:
             ),
             code(
                 """
+                train_df = df.loc[df["is_train"]] if "is_train" in df.columns else df
                 decay_records = []
                 for lag in [1, 2, 3]:
-                    future_return = df["return_open"].shift(-lag)
+                    future_return = train_df["return_open"].shift(-lag)
                     clean = pd.DataFrame(
-                        {"signal": df["sentiment_score"], "future_return": future_return}
+                        {"signal": train_df["sentiment_score"], "future_return": future_return}
                     ).dropna()
                     ic, p_val = stats.spearmanr(clean["signal"], clean["future_return"])
                     decay_records.append(
@@ -1110,14 +1133,15 @@ def build_cells(lang: str, data_name: str = "HSI") -> list:
             md(t["insights"]),
             code(
                 """
-                high_cutoff = df["vote_imbalance"].quantile(0.7)
-                low_cutoff = df["vote_imbalance"].quantile(0.3)
+                _vi_train = df.loc[df["is_train"]] if "is_train" in df.columns else df
+                high_cutoff = _vi_train["vote_imbalance"].quantile(0.7)
+                low_cutoff = _vi_train["vote_imbalance"].quantile(0.3)
 
-                high_sample = df.loc[
-                    df["vote_imbalance"] >= high_cutoff, ["sentiment_score", "return_open"]
+                high_sample = _vi_train.loc[
+                    _vi_train["vote_imbalance"] >= high_cutoff, ["sentiment_score", "return_open"]
                 ].dropna()
-                low_sample = df.loc[
-                    df["vote_imbalance"] <= low_cutoff, ["sentiment_score", "return_open"]
+                low_sample = _vi_train.loc[
+                    _vi_train["vote_imbalance"] <= low_cutoff, ["sentiment_score", "return_open"]
                 ].dropna()
 
                 high_ic = stats.spearmanr(high_sample["sentiment_score"], high_sample["return_open"])[0]
@@ -1135,19 +1159,22 @@ def build_cells(lang: str, data_name: str = "HSI") -> list:
                 """
                 def strategy_a_signals(frame):
                     signals = pd.Series(0, index=frame.index, dtype="int64")
-                    signals.loc[frame["extreme_bull"]] = 1
-                    signals.loc[frame["extreme_bear"]] = -1
+                    signals.loc[frame["extreme_bull"]] = -1
+                    signals.loc[frame["extreme_bear"]] = 1
                     return signals
 
                 def strategy_b_signals(frame, threshold=0.1):
                     signals = pd.Series(0, index=frame.index, dtype="int64")
-                    signals.loc[frame["sentiment_score"] > threshold] = 1
-                    signals.loc[frame["sentiment_score"] < -threshold] = -1
+                    signals.loc[frame["sentiment_score"] > threshold] = -1
+                    signals.loc[frame["sentiment_score"] < -threshold] = 1
                     return signals
 
                 def strategy_c_signals(frame, threshold=0.1):
                     base = strategy_b_signals(frame, threshold=threshold)
-                    median_imbalance = frame["vote_imbalance"].median()
+                    if "is_train" in frame.columns:
+                        median_imbalance = frame.loc[frame["is_train"], "vote_imbalance"].median()
+                    else:
+                        median_imbalance = frame["vote_imbalance"].median()
                     high_conviction = frame["vote_imbalance"] >= median_imbalance
                     return base.where(high_conviction, other=0).astype("int64")
 

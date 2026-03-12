@@ -46,14 +46,14 @@ def _print_signal_distribution(name: str, signals: pd.Series, extra_label: str =
 
 def strategy_a_signals(df: pd.DataFrame) -> pd.Series:
     """
-    Long-Short Portfolio Strategy.
+    Long-short contrarian tail strategy.
 
     Economic intuition:
-    Use the cross-sectional extremes of the sentiment distribution as a standard
-    signal validation design. Days with top-20% sentiment are treated as
-    extreme bullish states and go long; days with bottom-20% sentiment are
-    treated as extreme bearish states and go short. The middle 60% is left flat
-    to isolate whether return spreads are concentrated in the sentiment tails.
+    Mean IC is negative, so sentiment behaves as a contrarian indicator rather
+    than a trend-following one. Extreme bullish sentiment is interpreted as an
+    overheated or overbought state and is shorted; extreme bearish sentiment is
+    interpreted as an oversold state and is bought. The middle 60% remains flat
+    to isolate whether the reversal effect is concentrated in the tails.
 
     Timing note:
     Signals are generated from information known on day t. The backtest engine
@@ -63,8 +63,8 @@ def strategy_a_signals(df: pd.DataFrame) -> pd.Series:
         Series with values 1 (long), -1 (short), 0 (hold).
     """
     signals = pd.Series(0, index=df.index, dtype="int64")
-    signals.loc[df["extreme_bull"]] = 1
-    signals.loc[df["extreme_bear"]] = -1
+    signals.loc[df["extreme_bull"]] = -1
+    signals.loc[df["extreme_bear"]] = 1
 
     _print_signal_distribution("Strategy A", signals)
     return signals
@@ -72,14 +72,14 @@ def strategy_a_signals(df: pd.DataFrame) -> pd.Series:
 
 def strategy_b_signals(df: pd.DataFrame, threshold: float = 0.1) -> pd.Series:
     """
-    Threshold Strategy.
+    Threshold-based contrarian strategy.
 
     Economic intuition:
-    Convert raw daily sentiment into a directional trend-following rule. When
-    sentiment_score is clearly positive, market positioning is assumed to be
-    bullish enough to justify a long trade; when clearly negative, it justifies
-    a short trade. The neutral band around zero avoids trading weak or noisy
-    sentiment states. The threshold is parameterized for robustness testing.
+    Mean IC is negative, so raw sentiment should be inverted before trading.
+    Clearly positive sentiment is treated as a contrarian short because crowd
+    optimism likely reflects overextension; clearly negative sentiment is
+    treated as a contrarian long because crowd pessimism may mark oversold
+    conditions. The neutral band around zero avoids weak or noisy states.
 
     Timing note:
     Signals use only contemporaneous sentiment information. Align with future
@@ -92,8 +92,8 @@ def strategy_b_signals(df: pd.DataFrame, threshold: float = 0.1) -> pd.Series:
         Series with values 1 (long), -1 (short), 0 (hold).
     """
     signals = pd.Series(0, index=df.index, dtype="int64")
-    signals.loc[df["sentiment_score"] > threshold] = 1
-    signals.loc[df["sentiment_score"] < -threshold] = -1
+    signals.loc[df["sentiment_score"] > threshold] = -1
+    signals.loc[df["sentiment_score"] < -threshold] = 1
 
     _print_signal_distribution("Strategy B", signals, extra_label=f"threshold={threshold}")
     return signals
@@ -101,14 +101,13 @@ def strategy_b_signals(df: pd.DataFrame, threshold: float = 0.1) -> pd.Series:
 
 def strategy_c_signals(df: pd.DataFrame, threshold: float = 0.1) -> pd.Series:
     """
-    Volume Filter Strategy.
+    Contrarian threshold strategy with conviction filter.
 
     Economic intuition:
-    Start from the threshold rule in Strategy B, then execute only when
-    vote_imbalance is at or above its sample median. The idea is that stronger
-    agreement between bullish and bearish votes implies higher-conviction
-    sentiment, which should reduce noise and improve risk-adjusted performance.
-    Low-conviction days are forced to hold.
+    Start from the contrarian threshold rule in Strategy B, then execute only
+    when vote_imbalance is at or above its train-sample median. This keeps the
+    IC-consistent contrarian direction while filtering for high-conviction
+    sentiment states that may produce cleaner reversal opportunities.
 
     Timing note:
     The filter and base signal are both formed using information observed on
@@ -120,7 +119,10 @@ def strategy_c_signals(df: pd.DataFrame, threshold: float = 0.1) -> pd.Series:
     Returns:
         Series with values 1 (long), -1 (short), 0 (hold).
     """
-    median_imbalance = df["vote_imbalance"].median()
+    if "is_train" in df.columns:
+        median_imbalance = df.loc[df["is_train"], "vote_imbalance"].median()
+    else:
+        median_imbalance = df["vote_imbalance"].median()
     high_conviction = df["vote_imbalance"] >= median_imbalance
 
     base_signals = strategy_b_signals(df, threshold)
@@ -154,9 +156,7 @@ def generate_all_signals(df: pd.DataFrame, threshold: float = 0.1) -> pd.DataFra
 
     effective_b = (output["signal_b"] != 0).sum()
     effective_c = (output["signal_c"] != 0).sum()
-    reduction_ratio = (
-        float("nan") if effective_b == 0 else 1 - effective_c / effective_b
-    )
+    reduction_ratio = float("nan") if effective_b == 0 else 1 - effective_c / effective_b
 
     print("\nStrategy Signal Correlation:")
     print(output[SIGNAL_COLUMNS].corr())

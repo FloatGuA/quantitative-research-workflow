@@ -9,8 +9,6 @@ from scipy import stats
 
 INPUT_FILE = "hsi_features.csv"
 FONT_SIZE = 12
-QUANTILE_LABELS = ["Q1", "Q2", "Q3", "Q4", "Q5"]
-QUANTILE_COLORS = ["#d73027", "#fc8d59", "#fee090", "#91bfdb", "#4575b4"]
 
 
 def load_data(file_path: str) -> pd.DataFrame:
@@ -28,7 +26,6 @@ def validate_columns(df: pd.DataFrame) -> None:
         "Date",
         "Close",
         "sentiment_score",
-        "sentiment_quantile",
         "return_open",
         "return_close",
         "vote_imbalance",
@@ -132,42 +129,6 @@ def plot_sentiment_vs_return(df: pd.DataFrame) -> None:
     save_and_show(fig, "fig_04_scatter.png")
 
 
-def plot_quantile_returns(df: pd.DataFrame) -> None:
-    ordered_quantiles = pd.Categorical(df["sentiment_quantile"], categories=QUANTILE_LABELS, ordered=True)
-    quant_returns = df.assign(sentiment_quantile=ordered_quantiles).groupby(
-        "sentiment_quantile",
-        observed=False,
-    )["return_open"].mean()
-
-    fig, ax = plt.subplots(figsize=(8, 5))
-    quant_returns.plot(kind="bar", ax=ax, color=QUANTILE_COLORS)
-    ax.set_title("Average Next-Day Return by Sentiment Quantile")
-    ax.set_xlabel("Sentiment Quantile")
-    ax.set_ylabel("Mean Return")
-    ax.axhline(y=0, color="black", linestyle="--", alpha=0.5)
-    ax.tick_params(axis="x", rotation=0)
-    save_and_show(fig, "fig_05_quantile_returns.png")
-
-
-def plot_cumulative_quantile_returns(df: pd.DataFrame) -> None:
-    fig, ax = plt.subplots(figsize=(14, 6))
-
-    for quantile, color in zip(QUANTILE_LABELS, QUANTILE_COLORS):
-        mask = df["sentiment_quantile"] == quantile
-        subset = df.loc[mask, ["Date", "return_open"]].dropna().sort_values("Date")
-        if subset.empty:
-            continue
-
-        cum_returns = subset["return_open"].expanding().mean()
-        ax.plot(subset["Date"].values, cum_returns.values, label=quantile, color=color, linewidth=2)
-
-    ax.set_title("Cumulative Average Return by Sentiment Quantile")
-    ax.set_xlabel("Date")
-    ax.set_ylabel("Cumulative Average Return")
-    ax.legend()
-    save_and_show(fig, "fig_06_cumulative_quantile.png")
-
-
 def plot_correlation_heatmap(df: pd.DataFrame) -> None:
     corr_cols = [
         "sentiment_score",
@@ -191,8 +152,6 @@ def run_all_plots(df: pd.DataFrame) -> None:
     plot_price_vs_sentiment(df)
     plot_sentiment_distribution(df)
     plot_sentiment_vs_return(df)
-    plot_quantile_returns(df)
-    plot_cumulative_quantile_returns(df)
     plot_correlation_heatmap(df)
 
 

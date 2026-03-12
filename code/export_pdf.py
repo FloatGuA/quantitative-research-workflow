@@ -1,10 +1,9 @@
 """
-Export an executed Jupyter Notebook to PDF via HTML.
+Export any Jupyter Notebook to PDF via HTML.
 
 Usage:
-    python export_pdf.py output/HSI_research_report_executed.ipynb
-    python export_pdf.py output/HSI_research_report_zh_executed.ipynb
-    python export_pdf.py output/           # convert all *_executed.ipynb in directory
+    python export_pdf.py report.ipynb                  # single file
+    python export_pdf.py output/                       # all *.ipynb in directory
 """
 
 import argparse
@@ -50,9 +49,9 @@ def export_one(nb_path: Path, edge: str) -> Path:
     # Step 2: HTML → PDF via Edge
     print(f"  {html_path.name} → {pdf_path.name}")
     subprocess.run([
-        edge, "--headless", "--disable-gpu",
+        edge, "--headless", "--disable-gpu", "--no-sandbox",
         f"--print-to-pdf={pdf_path.resolve()}",
-        str(html_path.resolve()),
+        html_path.resolve().as_uri(),
     ], capture_output=True)
 
     if not pdf_path.exists():
@@ -67,9 +66,9 @@ def export_one(nb_path: Path, edge: str) -> Path:
 def collect_targets(path_arg: str) -> list[Path]:
     p = Path(path_arg)
     if p.is_dir():
-        targets = sorted(p.glob("*_executed.ipynb"))
+        targets = sorted(p.glob("*.ipynb"))
         if not targets:
-            print(f"No *_executed.ipynb files found in {p}")
+            print(f"No .ipynb files found in {p}")
             sys.exit(1)
         return targets
     if not p.exists():
@@ -82,7 +81,7 @@ def main():
     parser = argparse.ArgumentParser(description="Export executed notebooks to PDF.")
     parser.add_argument(
         "target",
-        help="Path to an executed .ipynb file, or a directory to batch-convert all *_executed.ipynb files.",
+        help="Path to a .ipynb file, or a directory to batch-convert all *.ipynb files.",
     )
     args = parser.parse_args()
 

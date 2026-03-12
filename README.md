@@ -13,7 +13,7 @@
 3. 安装依赖：
 
 ```bash
-pip install pandas numpy matplotlib seaborn scipy openpyxl nbformat nbconvert nbclient
+pip install -r requirements.txt
 ```
 
 ### 一键生成完整报告（推荐）
@@ -75,7 +75,7 @@ quantitative-research-workflow/
 │   │
 │   ├── task_001_data_loading.py     # 数据加载与清洗
 │   ├── task_002_feature_engineering.py  # 收益率 + 情绪特征
-│   ├── task_003_eda.py              # EDA 可视化（7 张图）
+│   ├── task_003_eda.py              # EDA 可视化（5 张图）
 │   ├── task_004_signal_analysis.py  # IC / ICIR / Signal Decay
 │   ├── task_005_insights.py         # Insight 文字总结
 │   ├── task_006_strategy_design.py  # 三种策略定义
@@ -143,8 +143,8 @@ quantitative-research-workflow/
 |------|------|----------|
 | `sentiment_score` | Up votes − Down votes | 主信号，净多空情绪（−1 到 1） |
 | `vote_imbalance` | \|Up votes − Down votes\| | 情绪强度，用于信号过滤 |
-| `extreme_bull` | sentiment_score top 20% | 极度乐观标记 |
-| `extreme_bear` | sentiment_score bottom 20% | 极度悲观标记 |
+| `extreme_bull` | sentiment_score top 20%（训练集分位数） | 极度乐观标记 |
+| `extreme_bear` | sentiment_score bottom 20%（训练集分位数） | 极度悲观标记 |
 | `sentiment_lag1/2/3` | 滞后 1/2/3 日情绪 | Signal Decay 分析 |
 
 ### 三种交易策略
@@ -168,7 +168,7 @@ quantitative-research-workflow/
 1. Introduction
 2. Data Overview
 3. Feature Engineering
-4. Exploratory Analysis（7 张可视化）
+4. Exploratory Analysis（5 张可视化）
 5. Signal Analysis（IC 时序、ICIR、Signal Decay）
 6. Insights
 7. Strategy Design
@@ -198,8 +198,7 @@ python task_008_robustness.py
 ## 已知注意事项
 
 - **Task 005/008 模块导入**：在 Notebook 中直接运行单个 cell 时，`from task_00N import ...` 可能因路径问题失败；建议通过 `nbconvert --execute` 整体执行
-- **Strategy C 轻微前视偏差**：`vote_imbalance` 中位数基于全样本计算，严格回测场景建议改用 expanding median
-- **绩效指标格式化**：Task 007 返回格式化字符串指标（如 `"12.34%"`），Task 008 内部有反解析逻辑
+- **OOS 起始仓位**：`split_metrics` 切片 OOS 段后直接 rebase，首行收益可能含 IS 末尾续仓影响，轻微偏差
 
 ---
 
